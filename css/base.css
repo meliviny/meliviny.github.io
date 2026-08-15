@@ -1,0 +1,46 @@
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  transition: background-color var(--transition-base), color var(--transition-base);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--color-accent-soft);
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.hero {
+  padding: var(--space-12) var(--space-6);
+  max-width: 56rem;
+}
+
+.eyebrow {
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+h1 {
+  margin-top: var(--space-3);
+  font-size: clamp(2.5rem, 5vw, 4.5rem);
+  line-height: 1.1;
+}
+
+.lead {
+  margin-top: var(--space-4);
+  max-width: 40rem;
+  color: var(--color-text-muted);
+  font-size: 1.1rem;
+}

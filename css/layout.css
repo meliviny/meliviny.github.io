@@ -1,0 +1,23 @@
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+  background: rgba(15, 23, 42, 0.02);
+  backdrop-filter: blur(12px);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.page-shell {
+  display: flex;
+  align-items: center;
+  min-height: calc(100vh - 72px);
+}

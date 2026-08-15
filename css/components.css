@@ -1,0 +1,15 @@
+.brand img {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.625rem;
+}
+
+[data-ready='true'] .hero {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.hero {
+  opacity: 0.98;
+  transition: opacity var(--transition-base), transform var(--transition-base);
+}

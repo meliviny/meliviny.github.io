@@ -1,0 +1,18 @@
+{
+  "name": "Meliviny",
+  "short_name": "Meliviny",
+  "description": "A personal music platform built as a static web application.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#7c3aed",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "assets/icons/meliviny-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

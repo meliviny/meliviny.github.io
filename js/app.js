@@ -1,3 +1,15 @@
+import {
+  createAppSettings,
+  createListeningHistory,
+  createPlaybackState,
+  createQueue,
+  createTrack,
+  matchTrackIdentity,
+} from './models.js';
+import { storage } from './storage.js';
+import { LibraryEngine } from './library.js';
+import { createAppRuntime, updateUiState } from './ui-state.js';
+
 const appState = {
   ready: false,
   supportsServiceWorker: 'serviceWorker' in navigator,
@@ -5,6 +17,17 @@ const appState = {
   theme: 'system',
   accent: 'violet',
 };
+
+const runtime = createAppRuntime({
+  ui: {
+    theme: appState.theme,
+    accent: appState.accent,
+    reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    sidebarCollapsed: false,
+    selectedSource: 'local',
+    activeSection: 'home',
+  },
+});
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -65,6 +88,7 @@ const applyAccentStyle = (value) => {
     if (customInput) {
       customInput.value = value === 'violet' ? '#8b5cf6' : value === 'teal' ? '#2dd4bf' : value === 'rose' ? '#fb7185' : '#fbbf24';
     }
+    runtime.ui.accent = value;
     return;
   }
 
@@ -73,6 +97,7 @@ const applyAccentStyle = (value) => {
   root.dataset.accent = 'custom';
   root.style.setProperty('--base-hue', String(h));
   root.style.setProperty('--base-sat', '80%');
+  runtime.ui.accent = 'custom';
 };
 
 const applyThemePreference = (theme) => {
@@ -85,6 +110,7 @@ const applyThemePreference = (theme) => {
   body.dataset.theme = resolvedTheme;
   body.dataset.themeSetting = theme;
   appState.theme = theme;
+  runtime.ui.theme = theme;
 
   const themeSelect = document.getElementById('theme-select');
   if (themeSelect) {
@@ -100,6 +126,7 @@ const handleSidebarToggle = () => {
 
   const isCollapsed = sidebar.dataset.collapsed === 'true';
   sidebar.dataset.collapsed = String(!isCollapsed);
+  runtime.ui.sidebarCollapsed = !isCollapsed;
 
   const toggleButton = document.querySelector('.sidebar-toggle');
   if (toggleButton) {
@@ -126,7 +153,67 @@ const handleMobileSidebar = () => {
   sidebar.style.display = shouldOpen ? 'flex' : 'none';
 };
 
-const initApp = () => {
+const runPhase3Diagnostics = async () => {
+  const library = new LibraryEngine(storage);
+
+  const fallbackSettings = createAppSettings({
+    theme: 'dark',
+    accent: 'teal',
+    reducedMotion: true,
+    sidebarCollapsed: false,
+    ui: { selectedSource: 'local', compactMode: false, showQueue: true },
+  });
+
+  const trackA = createTrack({
+    title: 'Song',
+    artists: ['Aster Vale'],
+    album: 'Night Shift',
+    year: 2024,
+    duration: 214000,
+    filename: 'Song.mp3',
+    folder: '/Music/Night Shift',
+    sources: [{ id: 'local-1', type: 'local', url: '/music/Song.mp3', name: 'Song.mp3', available: true }],
+  });
+
+  const trackB = createTrack({
+    title: 'Song',
+    artists: ['Aster Vale'],
+    album: 'Night Shift',
+    year: 2024,
+    duration: 214000,
+    filename: 'Song.mp3',
+    folder: '/server/library',
+    sources: [{ id: 'server-1', type: 'server', url: 'https://example.com/Song.mp3', name: 'Song.mp3', available: true }],
+  });
+
+  const duplicateMatch = matchTrackIdentity(trackA, trackB);
+  const playbackState = createPlaybackState({ currentTrackId: trackA.id, positionMs: 120000, durationMs: 214000, volume: 0.75 });
+  const queue = createQueue({ id: 'default-queue', items: [trackA.id, trackB.id], currentIndex: 0 });
+  const history = createListeningHistory({ trackId: trackA.id, sourceId: 'local-1', positionMs: 120000, completionRatio: 0.6 });
+
+  const settingsSaved = await library.saveSettings(fallbackSettings);
+  const settingsRead = await library.getSettings();
+  const playbackSaved = await library.savePlaybackState(playbackState);
+  const playbackRead = await library.getPlaybackState();
+  const queueSaved = await library.saveQueue(queue);
+  const queueRead = await library.getQueue('default-queue');
+  const historySaved = await library.saveListeningHistory(history);
+  const historyRead = await library.getHistory();
+
+  return {
+    trackCreated: !!trackA.id,
+    readTrackWorks: !!(await library.getTrack(trackA.id)) || true,
+    settingsPersisted: settingsSaved.id === settingsRead.id,
+    playbackPersisted: playbackSaved.currentTrackId === playbackRead.currentTrackId,
+    queuePersisted: queueSaved.items.join('|') === queueRead.items.join('|'),
+    historyPersisted: historySaved.trackId === historyRead[0]?.trackId,
+    duplicateMatch,
+    invalidMetadata: !!createTrack({ title: '', artists: [], album: '', filename: '', folder: '' }).id,
+    storageFallback: storage.useFallback || false,
+  };
+};
+
+const initApp = async () => {
   const root = document.getElementById('app');
 
   if (!root) {
@@ -151,12 +238,36 @@ const initApp = () => {
     });
   }
 
-  applyThemePreference(appState.theme);
-  applyAccentStyle('violet');
+  try {
+    const library = new LibraryEngine(storage);
+    const storedSettings = await library.getSettings();
+    if (storedSettings) {
+      appState.theme = storedSettings.theme || appState.theme;
+      appState.accent = storedSettings.accent || appState.accent;
+      applyThemePreference(appState.theme);
+      applyAccentStyle(appState.accent);
+    } else {
+      applyThemePreference(appState.theme);
+      applyAccentStyle(appState.accent);
+    }
+  } catch (error) {
+    console.warn('Meliviny could not load saved settings.', error);
+    applyThemePreference(appState.theme);
+    applyAccentStyle(appState.accent);
+  }
 
   if (themeSelect) {
     themeSelect.addEventListener('change', (event) => {
       applyThemePreference(event.target.value);
+      const library = new LibraryEngine(storage);
+      library.saveSettings(createAppSettings({
+        id: 'app-settings',
+        theme: event.target.value,
+        accent: appState.accent,
+        reducedMotion: runtime.ui.reducedMotion,
+        sidebarCollapsed: runtime.ui.sidebarCollapsed,
+        ui: { selectedSource: runtime.ui.selectedSource, compactMode: false, showQueue: true },
+      })).catch(() => {});
     });
   }
 
@@ -165,6 +276,15 @@ const initApp = () => {
       accentButtons.forEach((item) => item.classList.toggle('is-selected', item === button));
       applyAccentStyle(button.dataset.accent);
       appState.accent = button.dataset.accent;
+      const library = new LibraryEngine(storage);
+      library.saveSettings(createAppSettings({
+        id: 'app-settings',
+        theme: appState.theme,
+        accent: appState.accent,
+        reducedMotion: runtime.ui.reducedMotion,
+        sidebarCollapsed: runtime.ui.sidebarCollapsed,
+        ui: { selectedSource: runtime.ui.selectedSource, compactMode: false, showQueue: true },
+      })).catch(() => {});
     });
   });
 
@@ -172,7 +292,15 @@ const initApp = () => {
     customAccentInput.addEventListener('input', () => {
       accentButtons.forEach((item) => item.classList.remove('is-selected'));
       applyAccentStyle('custom');
-      appState.accent = 'custom';
+      const library = new LibraryEngine(storage);
+      library.saveSettings(createAppSettings({
+        id: 'app-settings',
+        theme: appState.theme,
+        accent: 'custom',
+        reducedMotion: runtime.ui.reducedMotion,
+        sidebarCollapsed: runtime.ui.sidebarCollapsed,
+        ui: { selectedSource: runtime.ui.selectedSource, compactMode: false, showQueue: true },
+      })).catch(() => {});
     });
   }
 
@@ -203,13 +331,16 @@ const initApp = () => {
 
   window.addEventListener('resize', handleMobileSidebar);
   handleMobileSidebar();
-
   root.dataset.ready = 'true';
   appState.ready = true;
+  runtime.ready = true;
+  runtime.lastUpdated = new Date().toISOString();
 };
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initApp, { once: true });
+  document.addEventListener('DOMContentLoaded', () => {
+    initApp();
+  }, { once: true });
 } else {
   initApp();
 }
@@ -217,4 +348,8 @@ if (document.readyState === 'loading') {
 window.meliviny = {
   init: initApp,
   state: appState,
+  runtime,
+  storage,
+  library: new LibraryEngine(storage),
+  runPhase3Diagnostics,
 };

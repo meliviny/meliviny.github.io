@@ -4,13 +4,14 @@ Meliviny is a personal music platform designed as a premium, static progressive 
 
 ## Current phase
 
-This repository is in active maintenance after Phase 03: design system, application shell, core data models, and resilient local storage are implemented for a polished static GitHub Pages experience.
+This repository is in active maintenance after Phase 06: design system, application shell, local storage, browser-local sources, and configurable public server-library metadata are implemented for a polished static GitHub Pages experience.
 
 ## Architecture
 
 - HTML for semantic application shell structure
 - CSS for custom design tokens, glassmorphism, layout, and responsive behavior
 - vanilla JavaScript for safe app initialization, theme handling, accent switching, and shell interactions
+- browser-local folder access and public `library.json` manifest integration without a backend
 - JSON metadata for installability and web app metadata
 - web APIs only where needed for progressive enhancement
 

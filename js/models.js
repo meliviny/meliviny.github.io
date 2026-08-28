@@ -1,4 +1,4 @@
-export const STORAGE_SCHEMA_VERSION = 1;
+export const STORAGE_SCHEMA_VERSION = 2;
 
 const normalizeText = (value, fallback = 'Unknown') => {
   if (typeof value === 'string') {

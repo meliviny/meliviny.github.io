@@ -13,6 +13,7 @@ const DB_STORES = {
   listeningHistory: 'listeningHistory',
   settings: 'settings',
   deviceInfo: 'deviceInfo',
+  serverLibraryCache: 'serverLibraryCache',
 };
 
 export class StorageManager {

@@ -4,6 +4,7 @@ import { LibraryEngine } from './library.js';
 import { createAppRuntime } from './ui-state.js';
 import { AudioPlayer } from './player.js';
 import { LocalSourceManager } from './local-sources.js';
+import { ServerLibraryManager } from './server-library.js';
 
 const appState = {
   ready: false,
@@ -26,6 +27,7 @@ const runtime = createAppRuntime({
 
 let audioPlayer = null;
 let localSources = null;
+let serverLibrary = null;
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -295,6 +297,36 @@ const renderConnectedSources = (sources, container) => {
   });
 };
 
+const renderServerStatus = (state) => {
+  const status = document.getElementById('server-status');
+  const enabled = document.getElementById('server-enabled');
+  const url = document.getElementById('server-url');
+  if (status) status.textContent = state.source.enabled ? state.status.replace('-', ' ') : 'Disabled';
+  if (enabled) enabled.checked = state.source.enabled;
+  if (url && state.source.url) url.value = state.source.url;
+};
+
+const renderServerTracks = (tracks, resultsElement, emptyState) => {
+  if (!tracks.length || !resultsElement) return;
+  emptyState.hidden = true;
+  resultsElement.hidden = false;
+  resultsElement.innerHTML = `<strong>${tracks.length} server track${tracks.length === 1 ? '' : 's'} available</strong>`;
+  tracks.forEach((track) => {
+    const source = track.sources?.find((candidate) => candidate.type === 'server');
+    if (!source) return;
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'library-track-row';
+    row.innerHTML = `<span>${track.title}</span><small>${track.artists?.join(', ') || 'Unknown artist'} · ${track.format.toUpperCase()}</small>`;
+    row.addEventListener('click', () => {
+      audioPlayer.setQueue(tracks.map((queueTrack) => ({ track: queueTrack, source: queueTrack.sources.find((candidate) => candidate.type === 'server') })).filter((item) => item.source), tracks.indexOf(track));
+      audioPlayer.loadTrack(track, source, { restorePosition: true });
+      document.querySelector('.player-drawer')?.classList.add('is-open');
+    });
+    resultsElement.append(row);
+  });
+};
+
 const updatePlayerUi = (state) => {
   const track = state.track;
   const title = track?.title || 'No track loaded';
@@ -414,10 +446,17 @@ const initApp = async () => {
   const libraryResults = document.getElementById('library-results');
   const connectedSources = document.getElementById('connected-sources');
   const addFolderButton = document.querySelector('.add-folder-button');
+  const serverEnabled = document.getElementById('server-enabled');
+  const serverUrl = document.getElementById('server-url');
+  const refreshServerButton = document.querySelector('.refresh-server-button');
+  const serverDetailsButton = document.querySelector('.server-details-button');
 
   audioPlayer = new AudioPlayer(audioElement, updatePlayerUi);
   localSources = new LocalSourceManager(storage, new LibraryEngine(storage));
+  serverLibrary = new ServerLibraryManager(storage, new LibraryEngine(storage));
   await localSources.loadSources();
+  await serverLibrary.initialize();
+  renderServerStatus(serverLibrary.getState());
   renderConnectedSources(localSources.sources, connectedSources);
   updatePlayerUi(audioPlayer.getState());
 
@@ -580,6 +619,41 @@ const initApp = async () => {
       showUnavailableNotice(`Folder access failed: ${error.message}`);
     }
   });
+  serverEnabled?.addEventListener('change', async () => {
+    const state = await serverLibrary.setEnabled(serverEnabled.checked);
+    renderServerStatus(state);
+  });
+  refreshServerButton?.addEventListener('click', async () => {
+    const state = await serverLibrary.refresh();
+    renderServerStatus(state);
+    renderServerTracks(state.tracks, libraryResults, libraryEmptyState);
+    showUnavailableNotice(state.status === 'cached-unavailable' ? 'Server unavailable. Showing cached library.' : state.status === 'available' ? `Server library refreshed: ${state.tracks.length} tracks.` : 'Server library is unavailable.');
+  });
+  serverDetailsButton?.addEventListener('click', () => {
+    const state = serverLibrary.getState();
+    showUnavailableNotice(`${state.source.name}: ${state.source.url || 'No manifest URL'} · ${state.status}`);
+  });
+  if (serverUrl) {
+    serverUrl.addEventListener('change', async () => {
+      if (!serverUrl.value || serverUrl.value === serverLibrary.source.url) return;
+      try {
+        const state = await serverLibrary.configure(serverUrl.value);
+        renderServerStatus(state);
+        renderServerTracks(state.tracks, libraryResults, libraryEmptyState);
+      } catch (error) {
+        showUnavailableNotice(error.message);
+      }
+    });
+  }
+  const initialServerState = serverLibrary.getState();
+  if (initialServerState.source.enabled) {
+    serverLibrary.refresh().then((state) => {
+      renderServerStatus(state);
+      renderServerTracks(state.tracks, libraryResults, libraryEmptyState);
+      if (state.status === 'cached-unavailable') showUnavailableNotice('Server unavailable. Showing cached library metadata.');
+      if (state.status === 'unavailable') showUnavailableNotice('Server library unavailable.');
+    });
+  }
   shareButton?.addEventListener('click', async () => {
     const state = audioPlayer.getState();
     if (!state.track) { showUnavailableNotice('Select a track before sharing.'); return; }

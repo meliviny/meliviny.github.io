@@ -296,7 +296,12 @@
             <p class="source-help">Meliviny reads selected folders in your browser. Your music never uploads.</p>
             <div id="connected-sources" class="connected-sources"></div>
           </div>
-          <label class="dialog-field">Server URL<input id="server-url" type="url" placeholder="https://music.example.com" /></label>
+          <div class="server-manager">
+            <div class="source-manager-header"><strong>Personal server library</strong><span id="server-status" class="source-status">Not checked</span></div>
+            <label class="source-option"><input id="server-enabled" type="checkbox" checked /> <span><strong>Enable server library</strong><small>Read public metadata from a library manifest</small></span></label>
+            <label class="dialog-field">Manifest URL<input id="server-url" type="url" placeholder="https://.../library.json" /></label>
+            <div class="server-actions"><button class="text-button refresh-server-button" type="button">Refresh library</button><button class="text-button server-details-button" type="button">Source details</button></div>
+          </div>
           <div class="dialog-actions"><button class="text-button" value="cancel">Cancel</button><button class="primary-button source-save-button" value="default">Use source</button></div>
         </form>
       </dialog>

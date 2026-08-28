@@ -11,6 +11,14 @@ const appState = {
   ready: false,
   supportsServiceWorker: 'serviceWorker' in navigator,
   supportsModules: !!document.querySelector('script[type="module"]'),
+  supportsIndexedDb: 'indexedDB' in window,
+  supportsFileSystemAccess: 'showDirectoryPicker' in window,
+  supportsMediaSession: 'mediaSession' in navigator,
+  supportsWebAudio: Boolean(window.AudioContext || window.webkitAudioContext),
+  supportsWebShare: 'share' in navigator,
+  supportsClipboard: Boolean(navigator.clipboard),
+  supportsInstallPrompt: false,
+  installed: window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true,
   theme: 'system',
   accent: 'violet',
 };
@@ -189,6 +197,58 @@ const showUnavailableNotice = (message) => {
   notice.classList.add('is-visible');
   window.clearTimeout(notice.dismissTimer);
   notice.dismissTimer = window.setTimeout(() => notice.classList.remove('is-visible'), 3200);
+};
+
+const initializePwa = () => {
+  let deferredInstallPrompt = null;
+  const installButton = document.getElementById('install-button');
+  const updateButton = document.getElementById('update-button');
+
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    appState.supportsInstallPrompt = true;
+    if (installButton && !appState.installed) installButton.hidden = false;
+  });
+
+  installButton?.addEventListener('click', async () => {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    const result = await deferredInstallPrompt.userChoice;
+    if (result.outcome === 'accepted') installButton.hidden = true;
+    deferredInstallPrompt = null;
+  });
+
+  window.addEventListener('appinstalled', () => {
+    appState.installed = true;
+    if (installButton) installButton.hidden = true;
+  });
+
+  if (!appState.supportsServiceWorker || !navigator.serviceWorker) return;
+  navigator.serviceWorker.register('./sw.js').then((registration) => {
+    const showUpdate = () => {
+      if (updateButton) updateButton.hidden = false;
+    };
+    if (registration.waiting) showUpdate();
+    registration.addEventListener('updatefound', () => {
+      const worker = registration.installing;
+      worker?.addEventListener('statechange', () => {
+        if (worker.state === 'installed' && navigator.serviceWorker.controller) showUpdate();
+      });
+    });
+    updateButton?.addEventListener('click', () => {
+      registration.waiting?.postMessage({ type: 'SKIP_WAITING' });
+    });
+  }).catch((error) => {
+    runtime.errors.push({ type: 'service-worker', message: error.message });
+  });
+
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
 };
 
 const renderAccountState = (state) => {
@@ -482,11 +542,7 @@ const initApp = async () => {
   updatePlayerUi(audioPlayer.getState());
   renderAccountState(firebaseSync.getState());
 
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {
-      // Ignore registration errors during the project foundation phase.
-    });
-  }
+  initializePwa();
 
   firebaseSync.initialize(async (state) => {
     renderAccountState(state);

@@ -6,6 +6,8 @@ body {
   font-family: var(--font-sans);
   line-height: 1.5;
   transition: background var(--transition-slow), color var(--transition-base);
+  min-height: 100dvh;
+  overflow-x: hidden;
 }
 
 :focus-visible {
@@ -27,11 +29,11 @@ button {
 }
 
 .app-shell {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--player-drawer-width);
   gap: 1.25rem;
-  padding: 1.25rem;
+  padding: max(1.25rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right)) max(1.25rem, env(safe-area-inset-bottom)) max(1.25rem, env(safe-area-inset-left));
 }
 
 .eyebrow,

@@ -1,16 +1,22 @@
 {
-  "name": "Meliviny",
-  "short_name": "Meliviny",
-  "description": "A personal music platform built as a static web application.",
+  "name": "MELIVINY Personal Music Platform",
+  "short_name": "MELIVINY",
+  "description": "A personal music platform for local and personal-server listening.",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#0b1220",
-  "theme_color": "#7c3aed",
+  "background_color": "#080b14",
+  "theme_color": "#080b14",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "assets/icons/meliviny-icon.svg",
-      "sizes": "any",
+      "src": "assets/icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/icon-512.svg",
+      "sizes": "512x512",
       "type": "image/svg+xml",
       "purpose": "any maskable"
     }

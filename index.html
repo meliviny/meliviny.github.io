@@ -11,6 +11,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Meliviny" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <title>MELIVINY</title>
     <link rel="icon" type="image/svg+xml" href="assets/icons/meliviny-icon.svg" />
     <link rel="manifest" href="manifest.json" />
@@ -179,6 +180,11 @@
             <div class="library-results" id="library-results" hidden aria-live="polite"></div>
           </section>
         </main>
+      </div>
+
+      <div class="pwa-actions" aria-live="polite">
+        <button id="install-button" class="text-button" type="button" hidden>Install MELIVINY</button>
+        <button id="update-button" class="primary-button" type="button" hidden>Update available</button>
       </div>
 
       <aside class="player-drawer" aria-label="Now playing">

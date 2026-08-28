@@ -22,7 +22,14 @@ export class LocalSourceManager {
 
   async loadSources() {
     const saved = await this.storage.list('musicSources');
-    this.sources = saved.filter((source) => source.type === 'local');
+    this.sources = saved
+      .filter((source) => source.type === 'local')
+      .map((source) => ({
+        ...source,
+        available: source.available !== false,
+        accessible: source.accessible !== false,
+        requiresReconnect: Boolean(source.requiresReconnect && source.available === false),
+      }));
     return this.sources;
   }
 
@@ -76,7 +83,25 @@ export class LocalSourceManager {
   async scanSource(source, onProgress = () => {}) {
     const handle = source.handle;
     if (!handle) {
-      return { source: { ...source, available: false, accessible: false, requiresReconnect: true }, tracks: [], missing: true };
+      const cachedTracks = await this.library.listTracks();
+      const tracks = cachedTracks.filter((track) => track.sources?.some((candidate) => candidate.sourceId === source.id && candidate.type === 'local'));
+      const restored = {
+        ...source,
+        available: source.available !== false,
+        accessible: source.accessible !== false,
+        requiresReconnect: false,
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (source.available !== false || source.accessible !== false || tracks.length) {
+        await this.storage.write('musicSources', restored);
+        this.sources = this.sources.map((item) => item.id === source.id ? restored : item);
+        return { source: restored, tracks, missing: false };
+      }
+
+      const unavailable = { ...source, available: false, accessible: false, requiresReconnect: true, updatedAt: new Date().toISOString() };
+      await this.storage.write('musicSources', unavailable);
+      return { source: unavailable, tracks: [], missing: true };
     }
 
     const permission = await this.ensurePermission(handle, true);

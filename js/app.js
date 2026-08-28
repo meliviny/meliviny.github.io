@@ -662,10 +662,20 @@ const updatePlayerUi = (state) => {
   const repeatSelect = document.getElementById('repeat-select');
   const shuffleToggle = document.querySelector('.shuffle-toggle');
   const monoToggle = document.getElementById('mono-toggle');
+  const sourcePill = document.querySelector('.meta-pill');
 
   titleTargets.forEach((element) => { element.textContent = title; });
   artistTargets.forEach((element) => { element.textContent = artist; });
   if (statusTarget) statusTarget.textContent = state.status === 'idle' ? 'Player ready' : state.status;
+  if (sourcePill) {
+    if (state.source) {
+      sourcePill.textContent = state.source.type === 'server' ? 'Server source' : 'Local source';
+    } else if (hasConnectedMusicSource()) {
+      sourcePill.textContent = 'Source connected';
+    } else {
+      sourcePill.textContent = 'No source selected';
+    }
+  }
   playButtons.forEach((button) => {
     button.disabled = !track || !state.source;
     button.textContent = state.isPlaying ? '❚❚' : '▶';
@@ -796,11 +806,18 @@ const initApp = async () => {
   serverLibrary = new ServerLibraryManager(storage, new LibraryEngine(storage));
   await localSources.loadSources();
   await serverLibrary.initialize();
-  indexedTracks = await new LibraryEngine(storage).listTracks();
+  const startupLocalResults = localSources.sources.length ? await localSources.refreshAll() : [];
+  const startupServerTracks = serverLibrary.getState()?.tracks || [];
+  const startupTracks = [
+    ...startupLocalResults.flatMap((result) => result.tracks || []),
+    ...startupServerTracks,
+  ];
+  indexedTracks = startupTracks.length ? startupTracks : await new LibraryEngine(storage).listTracks();
   persistDeviceInfo();
   renderServerStatus(serverLibrary.getState());
   if (quickSourceSelect) quickSourceSelect.value = runtime.ui.selectedSource;
   renderConnectedSources(localSources.sources, connectedSources);
+  syncIndexedTracks(indexedTracks);
   renderLibraryResults(indexedTracks, libraryResults, libraryEmptyState);
   renderSearchResults(indexedTracks);
   updatePlayerUi(audioPlayer.getState());
@@ -850,7 +867,7 @@ const initApp = async () => {
     const savedPlayback = await library.getPlaybackState();
     const savedTrack = savedPlayback?.currentTrackId ? await library.getTrack(savedPlayback.currentTrackId) : null;
     const savedSource = savedTrack?.sources?.find((source) => source.id === savedPlayback.sourceId) || savedTrack?.sources?.[0];
-    if (savedTrack && savedSource?.url && !savedSource.url.startsWith('blob:')) {
+    if (savedTrack && savedSource?.url && savedSource.url.startsWith('http') || savedSource?.url?.startsWith('data:')) {
       await audioPlayer.loadTrack(savedTrack, savedSource, { restorePosition: true });
     }
   } catch (error) {

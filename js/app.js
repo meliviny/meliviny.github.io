@@ -39,6 +39,8 @@ let localSources = null;
 let serverLibrary = null;
 let indexedTracks = [];
 const selectedFileUrls = new Map();
+let lastCloudPlaybackSyncAt = 0;
+let lastCloudPlaybackKey = '';
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -410,7 +412,7 @@ const playTrackAndQueue = async (track, source, queue = [{ track, source }], sta
   }
 
   audioPlayer.setQueue(queue, startIndex);
-  const loaded = await audioPlayer.loadTrack(track, source, { restorePosition: true });
+  const loaded = audioPlayer.loadTrack(track, source, { restorePosition: false });
   if (loaded) await audioPlayer.play();
   document.querySelector('.player-drawer')?.classList.add('is-open');
   return loaded;
@@ -664,6 +666,24 @@ const updatePlayerUi = (state) => {
   const monoToggle = document.getElementById('mono-toggle');
   const sourcePill = document.querySelector('.meta-pill');
 
+  if (state.track && state.source && firebaseSync.getState().user) {
+    const playbackKey = `${state.track.id}:${state.source.id}`;
+    const now = Date.now();
+    if (playbackKey !== lastCloudPlaybackKey || now - lastCloudPlaybackSyncAt >= 1000) {
+      lastCloudPlaybackKey = playbackKey;
+      lastCloudPlaybackSyncAt = now;
+      firebaseSync.writeMetadata('playback', 'playback-state', {
+        id: 'playback-state',
+        currentTrackId: state.track.id,
+        positionMs: Math.round(state.positionSeconds * 1000),
+        durationMs: Math.round(state.durationSeconds * 1000),
+        sourceId: state.source.id,
+        queueId: 'default-queue',
+        updatedAt: new Date().toISOString(),
+      }).catch(() => {});
+    }
+  }
+
   titleTargets.forEach((element) => { element.textContent = title; });
   artistTargets.forEach((element) => { element.textContent = artist; });
   if (statusTarget) statusTarget.textContent = state.status === 'idle' ? 'Player ready' : state.status;
@@ -828,6 +848,16 @@ const initApp = async () => {
   firebaseSync.initialize(async (state) => {
     renderAccountState(state);
     if (state.user) {
+      const restored = await firebaseSync.restorePlaybackState(storage);
+      if (restored?.currentTrackId) {
+        const restoredTrack = await new LibraryEngine(storage).getTrack(restored.currentTrackId);
+        const restoredSource = restoredTrack?.sources?.find((source) => source.id === restored.sourceId)
+          || restoredTrack?.sources?.find((source) => source.available !== false && source.accessible !== false);
+        if (restoredTrack && restoredSource?.url) {
+          audioPlayer.loadTrack(restoredTrack, restoredSource, { restorePosition: true });
+          updatePlayerUi(audioPlayer.getState());
+        }
+      }
       const synced = await firebaseSync.syncLocalState(storage);
       if (!synced.synced && synced.error) showUnavailableNotice(synced.error);
     }
@@ -867,8 +897,8 @@ const initApp = async () => {
     const savedPlayback = await library.getPlaybackState();
     const savedTrack = savedPlayback?.currentTrackId ? await library.getTrack(savedPlayback.currentTrackId) : null;
     const savedSource = savedTrack?.sources?.find((source) => source.id === savedPlayback.sourceId) || savedTrack?.sources?.[0];
-    if (savedTrack && savedSource?.url && savedSource.url.startsWith('http') || savedSource?.url?.startsWith('data:')) {
-      await audioPlayer.loadTrack(savedTrack, savedSource, { restorePosition: true });
+    if (savedTrack && savedSource?.url && (savedSource.url.startsWith('http') || savedSource.url.startsWith('data:') || savedSource.url.startsWith('blob:'))) {
+      audioPlayer.loadTrack(savedTrack, savedSource, { restorePosition: true });
     }
   } catch (error) {
     console.warn('Meliviny could not load saved settings.', error);

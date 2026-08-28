@@ -71,7 +71,7 @@ export class AudioEngine {
     });
   }
 
-  async loadTrack(track, source, options = {}) {
+  loadTrack(track, source, options = {}) {
     if (!this.audio || !track || !source?.url) {
       this.error = 'A playable track source is required.';
       this.setStatus('error');
@@ -88,10 +88,12 @@ export class AudioEngine {
     this.updateMediaSession();
 
     if (options.restorePosition && this.persistence) {
-      const saved = await this.persistence.read('playbackState', 'playback-state');
-      if (saved?.currentTrackId === track.id && saved.positionMs > 0) {
-        this.audio.addEventListener('loadedmetadata', () => this.seekTo(saved.positionMs / 1000), { once: true });
-      }
+      this.persistence.read('playbackState', 'playback-state').then((saved) => {
+        if (this.track?.id !== track.id || this.source?.id !== source.id) return;
+        if (saved?.currentTrackId === track.id && saved.positionMs > 0) {
+          this.audio.addEventListener('loadedmetadata', () => this.seekTo(saved.positionMs / 1000), { once: true });
+        }
+      });
     }
     this.emitState();
     return true;

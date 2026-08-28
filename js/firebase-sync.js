@@ -135,6 +135,15 @@ export class FirebaseSync {
     }
   }
 
+  async restorePlaybackState(storage) {
+    if (!this.db || !this.user) return null;
+    const remote = await this.readMetadata('playback', 'playback-state');
+    if (!remote?.currentTrackId) return null;
+    const playback = { ...remote, id: 'playback-state' };
+    await storage.write('playbackState', playback);
+    return playback;
+  }
+
   getState() {
     return {
       status: this.status,

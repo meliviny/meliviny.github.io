@@ -124,6 +124,7 @@ const persistSettings = () => {
     sidebarCollapsed: runtime.ui.sidebarCollapsed,
     sourcePreference: runtime.ui.selectedSource,
     playback: {
+      volume: audioPlayer?.getState().volume ?? 0.8,
       repeatMode: document.getElementById('repeat-select')?.value || 'off',
       shuffle: Boolean(audioPlayer?.getState().shuffle),
       monoMode: Boolean(document.getElementById('mono-toggle')?.checked),
@@ -685,11 +686,14 @@ const initApp = async () => {
       applyThemePreference(appState.theme);
       applyAccentStyle(appState.accent);
       if (quickSourceSelect) quickSourceSelect.value = storedSettings.sourcePreference || runtime.ui.selectedSource;
+      if (storedSettings.sourcePreference) runtime.ui.selectedSource = storedSettings.sourcePreference;
       if (repeatSelect && storedSettings.playback?.repeatMode) repeatSelect.value = storedSettings.playback.repeatMode;
       if (monoToggle) monoToggle.checked = Boolean(storedSettings.playback?.monoMode);
       if (eqSelect && storedSettings.playback?.eqPreset) eqSelect.value = storedSettings.playback.eqPreset;
       if (settingsPlaybackPersistence) settingsPlaybackPersistence.checked = storedSettings.playback?.persistPosition !== false;
       if (settingsGapless) settingsGapless.checked = Boolean(storedSettings.playback?.gapless);
+      if (settingsEq && storedSettings.playback?.eqPreset) settingsEq.value = storedSettings.playback.eqPreset;
+      if (sidebarToggle && storedSettings.sidebarCollapsed !== undefined && Boolean(storedSettings.sidebarCollapsed) !== (document.querySelector('.sidebar')?.dataset.collapsed === 'true')) handleSidebarToggle();
       if (repeatSelect && storedSettings.playback?.repeatMode) audioPlayer.setRepeatMode(storedSettings.playback.repeatMode);
       if (shuffleToggle && storedSettings.playback?.shuffle) audioPlayer.setShuffle(true);
       if (volumeRange && storedSettings.playback?.volume !== undefined) audioPlayer.setVolume(storedSettings.playback.volume);
@@ -829,12 +833,13 @@ const initApp = async () => {
   playbackToggles.forEach((button) => button.addEventListener('click', () => audioPlayer.togglePlayback()));
   previousToggles.forEach((button) => button.addEventListener('click', () => audioPlayer.previous()));
   nextToggles.forEach((button) => button.addEventListener('click', () => audioPlayer.next()));
-  shuffleToggle?.addEventListener('click', () => audioPlayer.setShuffle(!audioPlayer.getState().shuffle));
+  shuffleToggle?.addEventListener('click', () => { audioPlayer.setShuffle(!audioPlayer.getState().shuffle); persistSettings(); });
   muteToggle?.addEventListener('click', () => audioPlayer.toggleMute());
   volumeRange?.addEventListener('input', () => audioPlayer.setVolume(volumeRange.value));
-  repeatSelect?.addEventListener('change', () => audioPlayer.setRepeatMode(repeatSelect.value));
-  monoToggle?.addEventListener('change', () => audioPlayer.setMono(monoToggle.checked));
-  eqSelect?.addEventListener('change', () => audioPlayer.setEqPreset(eqSelect.value));
+  volumeRange?.addEventListener('change', () => persistSettings());
+  repeatSelect?.addEventListener('change', () => { audioPlayer.setRepeatMode(repeatSelect.value); persistSettings(); });
+  monoToggle?.addEventListener('change', () => { audioPlayer.setMono(monoToggle.checked); persistSettings(); });
+  eqSelect?.addEventListener('change', () => { audioPlayer.setEqPreset(eqSelect.value); persistSettings(); });
   progressBars.forEach((bar) => bar.addEventListener('click', (event) => {
     if (!audioPlayer?.getState().durationSeconds) {
       return;

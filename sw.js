@@ -1,4 +1,4 @@
-const CACHE_NAME = 'meliviny-shell-v3';
+const CACHE_NAME = 'meliviny-shell-v5';
 const SHELL_URLS = [
   './',
   './index.html',

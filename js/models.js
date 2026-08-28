@@ -205,6 +205,9 @@ export const createAppSettings = (input = {}) => {
       shuffle: Boolean(input.playback?.shuffle),
       repeatMode: input.playback?.repeatMode || 'off',
       monoMode: Boolean(input.playback?.monoMode),
+      gapless: Boolean(input.playback?.gapless),
+      persistPosition: input.playback?.persistPosition !== false,
+      eqPreset: input.playback?.eqPreset || 'flat',
     },
     eq: input.eq || null,
     ui: {

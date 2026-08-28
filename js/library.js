@@ -27,8 +27,9 @@ export class LibraryEngine {
   }
 
   async saveSettings(settings) {
-    await this.storage.write('settings', settings);
-    return settings;
+    const payload = { ...settings, id: settings.id || 'app-settings' };
+    await this.storage.write('settings', payload);
+    return payload;
   }
 
   async getSettings() {

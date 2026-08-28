@@ -195,6 +195,7 @@ export const createAppSettings = (input = {}) => {
     version: STORAGE_SCHEMA_VERSION,
     theme: input.theme || 'system',
     accent: input.accent || 'violet',
+    customAccent: input.customAccent || null,
     reducedMotion: Boolean(input.reducedMotion),
     sidebarCollapsed: Boolean(input.sidebarCollapsed),
     sourcePreference: input.sourcePreference || 'smart',
@@ -217,6 +218,7 @@ export const createAppSettings = (input = {}) => {
 
 export const createDeviceInfo = (input = {}) => {
   const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown';
+  const hasNavigator = typeof navigator !== 'undefined';
 
   return {
     id: input.id || `device-${hashString(userAgent)}`,
@@ -224,7 +226,7 @@ export const createDeviceInfo = (input = {}) => {
     userAgent: input.userAgent || userAgent,
     capabilities: {
       indexedDb: Boolean(input.capabilities?.indexedDb ?? (typeof indexedDB !== 'undefined')),
-      serviceWorker: Boolean(input.capabilities?.serviceWorker ?? ('serviceWorker' in navigator)),
+      serviceWorker: Boolean(input.capabilities?.serviceWorker ?? (hasNavigator && 'serviceWorker' in navigator)),
       localStorage: Boolean(input.capabilities?.localStorage ?? (typeof localStorage !== 'undefined')),
     },
     createdAt: input.createdAt || new Date().toISOString(),
@@ -286,10 +288,15 @@ export const buildTrackIdentity = (metadata = {}) => {
   const artists = uniqueValues(toArray(metadata.artists)).map((artist) => normalizeComparableText(artist, 'unknown-artist'));
   const duration = safeNumber(metadata.duration, 0);
   const year = metadata.year || 'unknown-year';
+  const metadataKey = [title, album, artists.join('|'), duration, year].join('|');
+
+  if (title !== 'untitled track' && artists.length && album !== 'unknown album') {
+    return `track-${hashString(metadataKey)}`;
+  }
+
   const folder = normalizeComparableText(metadata.folder, 'unknown-folder');
   const filename = normalizeComparableText(metadata.filename, 'unknown-file');
-
-  return `track-${hashString([title, album, artists.join('|'), duration, year, folder, filename].join('|'))}`;
+  return `track-${hashString([metadataKey, folder, filename].join('|'))}`;
 };
 
 export const matchTrackIdentity = (firstTrack, secondTrack) => {
@@ -316,7 +323,7 @@ export const matchTrackIdentity = (firstTrack, secondTrack) => {
   }
 
   const sourcesMatch = firstTrack.sources?.some((source) => secondTrack.sources?.some((otherSource) => {
-    return source.url === otherSource.url || source.name === otherSource.name || source.baseUrl === otherSource.baseUrl;
+    return source.url && otherSource.url && source.url === otherSource.url;
   }));
 
   if (sourcesMatch) {

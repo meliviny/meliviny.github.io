@@ -31,7 +31,7 @@ export class StorageManager {
   }
 
   async createDatabase() {
-    if (!('indexedDB' in window)) {
+    if (typeof window === 'undefined' || !('indexedDB' in window)) {
       this.useFallback = true;
       return null;
     }
@@ -164,7 +164,17 @@ export class StorageManager {
     }
 
     const raw = localStorage.getItem(this.getFallbackKey(storeName, key));
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(raw);
+    } catch (error) {
+      console.warn(`Meliviny found corrupted fallback data for ${storeName}.`, error);
+      localStorage.removeItem(this.getFallbackKey(storeName, key));
+      return null;
+    }
   }
 
   writeFallback(storeName, value) {

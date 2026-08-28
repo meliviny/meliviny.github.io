@@ -4,7 +4,7 @@ Meliviny is a personal music platform designed as a premium, static progressive 
 
 ## Current phase
 
-This repository is in Phase 02: design system and application shell implementation for a polished static GitHub Pages experience.
+This repository is in active maintenance after Phase 03: design system, application shell, core data models, and resilient local storage are implemented for a polished static GitHub Pages experience.
 
 ## Architecture
 

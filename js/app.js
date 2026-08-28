@@ -8,7 +8,7 @@ import {
 } from './models.js';
 import { storage } from './storage.js';
 import { LibraryEngine } from './library.js';
-import { createAppRuntime, updateUiState } from './ui-state.js';
+import { createAppRuntime } from './ui-state.js';
 
 const appState = {
   ready: false,
@@ -92,12 +92,29 @@ const applyAccentStyle = (value) => {
     return;
   }
 
-  const color = customInput ? customInput.value : '#8b5cf6';
+  const color = customInput?.value || '#8b5cf6';
   const { h } = hexToHsl(color);
   root.dataset.accent = 'custom';
   root.style.setProperty('--base-hue', String(h));
   root.style.setProperty('--base-sat', '80%');
   runtime.ui.accent = 'custom';
+};
+
+const persistSettings = () => {
+  const customInput = document.getElementById('custom-accent');
+  const library = new LibraryEngine(storage);
+
+  return library.saveSettings(createAppSettings({
+    id: 'app-settings',
+    theme: appState.theme,
+    accent: appState.accent,
+    customAccent: customInput?.value || null,
+    reducedMotion: runtime.ui.reducedMotion,
+    sidebarCollapsed: runtime.ui.sidebarCollapsed,
+    ui: { selectedSource: runtime.ui.selectedSource, compactMode: false, showQueue: true },
+  })).catch((error) => {
+    runtime.errors.push({ type: 'settings', message: error.message });
+  });
 };
 
 const applyThemePreference = (theme) => {
@@ -231,6 +248,11 @@ const initApp = async () => {
   const customAccentInput = document.getElementById('custom-accent');
   const sidebarToggle = document.querySelector('.sidebar-toggle');
   const mobileMenuToggle = document.querySelector('.mobile-menu-toggle');
+  const mobileNavItems = document.querySelectorAll('.mobile-nav-item');
+  const desktopNavItems = document.querySelectorAll('.nav-item');
+  const playerDrawer = document.querySelector('.player-drawer');
+  const playerClose = document.querySelector('.player-close');
+  const miniArt = document.querySelector('.mini-art');
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {
@@ -244,6 +266,9 @@ const initApp = async () => {
     if (storedSettings) {
       appState.theme = storedSettings.theme || appState.theme;
       appState.accent = storedSettings.accent || appState.accent;
+      if (customAccentInput && storedSettings.customAccent) {
+        customAccentInput.value = storedSettings.customAccent;
+      }
       applyThemePreference(appState.theme);
       applyAccentStyle(appState.accent);
     } else {
@@ -259,15 +284,7 @@ const initApp = async () => {
   if (themeSelect) {
     themeSelect.addEventListener('change', (event) => {
       applyThemePreference(event.target.value);
-      const library = new LibraryEngine(storage);
-      library.saveSettings(createAppSettings({
-        id: 'app-settings',
-        theme: event.target.value,
-        accent: appState.accent,
-        reducedMotion: runtime.ui.reducedMotion,
-        sidebarCollapsed: runtime.ui.sidebarCollapsed,
-        ui: { selectedSource: runtime.ui.selectedSource, compactMode: false, showQueue: true },
-      })).catch(() => {});
+      persistSettings();
     });
   }
 
@@ -276,15 +293,7 @@ const initApp = async () => {
       accentButtons.forEach((item) => item.classList.toggle('is-selected', item === button));
       applyAccentStyle(button.dataset.accent);
       appState.accent = button.dataset.accent;
-      const library = new LibraryEngine(storage);
-      library.saveSettings(createAppSettings({
-        id: 'app-settings',
-        theme: appState.theme,
-        accent: appState.accent,
-        reducedMotion: runtime.ui.reducedMotion,
-        sidebarCollapsed: runtime.ui.sidebarCollapsed,
-        ui: { selectedSource: runtime.ui.selectedSource, compactMode: false, showQueue: true },
-      })).catch(() => {});
+      persistSettings();
     });
   });
 
@@ -292,21 +301,41 @@ const initApp = async () => {
     customAccentInput.addEventListener('input', () => {
       accentButtons.forEach((item) => item.classList.remove('is-selected'));
       applyAccentStyle('custom');
-      const library = new LibraryEngine(storage);
-      library.saveSettings(createAppSettings({
-        id: 'app-settings',
-        theme: appState.theme,
-        accent: 'custom',
-        reducedMotion: runtime.ui.reducedMotion,
-        sidebarCollapsed: runtime.ui.sidebarCollapsed,
-        ui: { selectedSource: runtime.ui.selectedSource, compactMode: false, showQueue: true },
-      })).catch(() => {});
+      appState.accent = 'custom';
+      persistSettings();
     });
   }
 
   if (sidebarToggle) {
-    sidebarToggle.addEventListener('click', handleSidebarToggle);
+    sidebarToggle.addEventListener('click', () => {
+      handleSidebarToggle();
+      persistSettings();
+    });
   }
+
+  mobileNavItems.forEach((item) => {
+    item.addEventListener('click', () => {
+      mobileNavItems.forEach((navItem) => navItem.classList.toggle('active', navItem === item));
+      runtime.ui.activeSection = item.getAttribute('aria-label')?.toLowerCase() || 'home';
+      const target = document.getElementById(`${runtime.ui.activeSection}-heading`);
+      target?.scrollIntoView({ behavior: runtime.ui.reducedMotion ? 'auto' : 'smooth', block: 'start' });
+    });
+  });
+
+  desktopNavItems.forEach((item) => {
+    item.addEventListener('click', () => {
+      desktopNavItems.forEach((navItem) => navItem.classList.toggle('active', navItem === item));
+      const label = item.querySelector('.nav-label')?.textContent?.toLowerCase() || 'home';
+      runtime.ui.activeSection = label;
+      const target = document.getElementById(`${label}-heading`);
+      target?.scrollIntoView({ behavior: runtime.ui.reducedMotion ? 'auto' : 'smooth', block: 'start' });
+    });
+  });
+
+  const openPlayer = () => playerDrawer?.classList.add('is-open');
+  const closePlayer = () => playerDrawer?.classList.remove('is-open');
+  playerClose?.addEventListener('click', closePlayer);
+  miniArt?.addEventListener('click', openPlayer);
 
   if (mobileMenuToggle) {
     mobileMenuToggle.addEventListener('click', () => {

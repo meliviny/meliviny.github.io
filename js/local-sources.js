@@ -111,6 +111,8 @@ export class LocalSourceManager {
       const previous = existing.find((track) => track.sources?.some((candidate) => candidate.fingerprint === item.fingerprint && candidate.sourceId === source.id));
       const objectUrl = URL.createObjectURL(item.file);
       const sourceCandidate = { id: `${source.id}:${item.fingerprint}`, sourceId: source.id, type: 'local', name: item.file.name, url: objectUrl, fingerprint: item.fingerprint, available: true, accessible: true, browserSupport: 'supported', size: item.file.size };
+      const previousUrl = this.objectUrls.get(`${source.id}:${item.fingerprint}`);
+      if (previousUrl) URL.revokeObjectURL(previousUrl);
       this.objectUrls.set(`${source.id}:${item.fingerprint}`, objectUrl);
       if (previous) {
         const updated = { ...previous, sources: previous.sources.map((candidate) => candidate.fingerprint === item.fingerprint && candidate.sourceId === source.id ? sourceCandidate : candidate), updatedAt: new Date().toISOString() };
@@ -167,6 +169,19 @@ export class LocalSourceManager {
   async removeSource(sourceId) {
     this.sources = this.sources.filter((source) => source.id !== sourceId);
     await this.storage.delete('musicSources', sourceId);
+    const tracks = await this.library.listTracks();
+    for (const track of tracks) {
+      const hasSource = track.sources?.some((source) => source.sourceId === sourceId);
+      if (!hasSource) continue;
+      const updated = {
+        ...track,
+        sources: track.sources.map((source) => source.sourceId === sourceId
+          ? { ...source, available: false, accessible: false }
+          : source),
+        updatedAt: new Date().toISOString(),
+      };
+      await this.storage.write('tracks', updated);
+    }
     [...this.objectUrls.keys()].filter((key) => key.startsWith(`${sourceId}:`)).forEach((key) => {
       URL.revokeObjectURL(this.objectUrls.get(key));
       this.objectUrls.delete(key);

@@ -1,4 +1,4 @@
-import { createAppSettings } from './models.js';
+import { createAppSettings, createDeviceInfo } from './models.js';
 import { storage } from './storage.js';
 import { LibraryEngine } from './library.js';
 import { createAppRuntime } from './ui-state.js';
@@ -38,6 +38,7 @@ let audioPlayer = null;
 let localSources = null;
 let serverLibrary = null;
 let indexedTracks = [];
+const selectedFileUrls = new Map();
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -134,6 +135,15 @@ const persistSettings = () => {
   })).catch((error) => {
     runtime.errors.push({ type: 'settings', message: error.message });
   });
+};
+
+const persistDeviceInfo = async () => {
+  try {
+    const device = createDeviceInfo({ id: 'device-info' });
+    await storage.write('deviceInfo', device);
+  } catch (error) {
+    runtime.errors.push({ type: 'device-info', message: 'Device preferences could not be saved locally.' });
+  }
 };
 
 const applyThemePreference = (theme) => {
@@ -312,6 +322,11 @@ const scanAudioFiles = async (files, library, resultsElement, emptyState) => {
   for (const file of audioFiles) {
     const title = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ').trim();
     const duration = await readAudioDuration(file);
+    const fileKey = `${file.name}|${file.size}|${file.lastModified}|${file.webkitRelativePath || ''}`;
+    const previousUrl = selectedFileUrls.get(fileKey);
+    if (previousUrl) URL.revokeObjectURL(previousUrl);
+    const fileUrl = URL.createObjectURL(file);
+    selectedFileUrls.set(fileKey, fileUrl);
     const track = await library.addTrack({
       title: title || 'Untitled track',
       artists: [],
@@ -325,7 +340,7 @@ const scanAudioFiles = async (files, library, resultsElement, emptyState) => {
         id: `local-${file.name}-${file.lastModified}`,
         type: 'local',
         name: file.name,
-        url: URL.createObjectURL(file),
+        url: fileUrl,
         available: true,
         accessible: true,
         browserSupport: 'supported',
@@ -341,7 +356,11 @@ const scanAudioFiles = async (files, library, resultsElement, emptyState) => {
     const row = document.createElement('button');
     row.type = 'button';
     row.className = 'library-track-row';
-    row.innerHTML = `<span>${track.title}</span><small>${track.format.toUpperCase()} · ${formatTime(track.duration / 1000)}</small>`;
+    const title = document.createElement('span');
+    title.textContent = track.title;
+    const details = document.createElement('small');
+    details.textContent = `${track.format.toUpperCase()} · ${formatTime(track.duration / 1000)}`;
+    row.replaceChildren(title, details);
     row.addEventListener('click', () => {
       audioPlayer.setQueue(tracks.map((queueTrack) => ({ track: queueTrack, source: queueTrack.sources[0] })), tracks.indexOf(track));
       audioPlayer.loadTrack(track, track.sources[0], { restorePosition: true });
@@ -361,7 +380,11 @@ const renderSearchResults = (tracks) => {
   matching.forEach((track) => {
     const row = document.createElement('button');
     row.type = 'button'; row.className = 'library-track-row';
-    row.innerHTML = `<span>${track.title}</span><small>${track.artists?.join(', ') || 'Unknown artist'} · ${track.album || 'Unknown album'}</small>`;
+    const title = document.createElement('span');
+    title.textContent = track.title;
+    const details = document.createElement('small');
+    details.textContent = `${track.artists?.join(', ') || 'Unknown artist'} · ${track.album || 'Unknown album'}`;
+    row.replaceChildren(title, details);
     row.addEventListener('click', () => { const source = track.sources?.find((item) => item.available) || track.sources?.[0]; audioPlayer.setQueue([{ track, source }]); audioPlayer.loadTrack(track, source, { restorePosition: true }); });
     results.append(row);
   });
@@ -411,7 +434,20 @@ const renderConnectedSources = (sources, container) => {
     const row = document.createElement('div');
     row.className = 'connected-source';
     const state = source.requiresReconnect ? 'Reconnect required' : `${source.fileCount || 0} files`;
-    row.innerHTML = `<span><strong>${source.name}</strong><small>${state}</small></span><span class="source-row-actions"><button class="text-button refresh-source" type="button">${source.requiresReconnect ? 'Reconnect' : 'Refresh'}</button><button class="text-button remove-source" type="button">Remove</button></span>`;
+    const details = document.createElement('span');
+    const name = document.createElement('strong');
+    name.textContent = source.name;
+    const sourceState = document.createElement('small');
+    sourceState.textContent = state;
+    details.append(name, sourceState);
+    const actions = document.createElement('span');
+    actions.className = 'source-row-actions';
+    const refresh = document.createElement('button');
+    refresh.className = 'text-button refresh-source'; refresh.type = 'button'; refresh.textContent = source.requiresReconnect ? 'Reconnect' : 'Refresh';
+    const remove = document.createElement('button');
+    remove.className = 'text-button remove-source'; remove.type = 'button'; remove.textContent = 'Remove';
+    actions.append(refresh, remove);
+    row.replaceChildren(details, actions);
     row.querySelector('.refresh-source').addEventListener('click', async () => {
       const result = source.requiresReconnect ? await localSources.reconnect(source.id) : await localSources.scanSource(source);
       renderConnectedSources(localSources.sources, container);
@@ -453,7 +489,11 @@ const renderServerTracks = (tracks, resultsElement, emptyState) => {
     const row = document.createElement('button');
     row.type = 'button';
     row.className = 'library-track-row';
-    row.innerHTML = `<span>${track.title}</span><small>${track.artists?.join(', ') || 'Unknown artist'} · ${track.format.toUpperCase()}</small>`;
+    const title = document.createElement('span');
+    title.textContent = track.title;
+    const details = document.createElement('small');
+    details.textContent = `${track.artists?.join(', ') || 'Unknown artist'} · ${track.format.toUpperCase()}`;
+    row.replaceChildren(title, details);
     row.addEventListener('click', () => {
       audioPlayer.setQueue(tracks.map((queueTrack) => ({ track: queueTrack, source: queueTrack.sources.find((candidate) => candidate.type === 'server') })).filter((item) => item.source), tracks.indexOf(track));
       audioPlayer.loadTrack(track, source, { restorePosition: true });
@@ -517,8 +557,12 @@ const updatePlayerUi = (state) => {
     state.queue.forEach((item, index) => {
       const entry = document.createElement('li');
       entry.className = `queue-item${index === state.currentIndex ? ' active' : ''}`;
-      entry.innerHTML = `<span>${item.track.title}</span><button type="button" class="queue-remove" aria-label="Remove ${item.track.title}">×</button>`;
-      entry.querySelector('.queue-remove').addEventListener('click', () => audioPlayer.removeFromQueue(index));
+      const title = document.createElement('span');
+      title.textContent = item.track.title;
+      const remove = document.createElement('button');
+      remove.type = 'button'; remove.className = 'queue-remove'; remove.setAttribute('aria-label', `Remove ${item.track.title}`); remove.textContent = '×';
+      remove.addEventListener('click', () => audioPlayer.removeFromQueue(index));
+      entry.replaceChildren(title, remove);
       queueList.append(entry);
     });
   }
@@ -612,6 +656,7 @@ const initApp = async () => {
   await localSources.loadSources();
   await serverLibrary.initialize();
   indexedTracks = await new LibraryEngine(storage).listTracks();
+  persistDeviceInfo();
   renderServerStatus(serverLibrary.getState());
   if (quickSourceSelect) quickSourceSelect.value = runtime.ui.selectedSource;
   renderConnectedSources(localSources.sources, connectedSources);
@@ -645,6 +690,11 @@ const initApp = async () => {
       if (eqSelect && storedSettings.playback?.eqPreset) eqSelect.value = storedSettings.playback.eqPreset;
       if (settingsPlaybackPersistence) settingsPlaybackPersistence.checked = storedSettings.playback?.persistPosition !== false;
       if (settingsGapless) settingsGapless.checked = Boolean(storedSettings.playback?.gapless);
+      if (repeatSelect && storedSettings.playback?.repeatMode) audioPlayer.setRepeatMode(storedSettings.playback.repeatMode);
+      if (shuffleToggle && storedSettings.playback?.shuffle) audioPlayer.setShuffle(true);
+      if (volumeRange && storedSettings.playback?.volume !== undefined) audioPlayer.setVolume(storedSettings.playback.volume);
+      if (monoToggle && storedSettings.playback?.monoMode) audioPlayer.setMono(true);
+      if (eqSelect && storedSettings.playback?.eqPreset) await audioPlayer.setEqPreset(storedSettings.playback.eqPreset);
     } else {
       applyThemePreference(appState.theme);
       applyAccentStyle(appState.accent);
@@ -947,6 +997,7 @@ const initApp = async () => {
   }
 
   window.addEventListener('resize', handleMobileSidebar);
+  window.addEventListener('beforeunload', () => selectedFileUrls.forEach((url) => URL.revokeObjectURL(url)), { once: true });
   handleMobileSidebar();
   root.dataset.ready = 'true';
   appState.ready = true;

@@ -7,6 +7,14 @@ const SUPPORTED_FORMATS = new Set(['mp3', 'wav', 'flac', 'webm']);
 const extensionOf = (url = '') => url.split('?')[0].split('#')[0].split('.').pop()?.toLowerCase() || '';
 const asArray = (value) => Array.isArray(value) ? value : [];
 const isSupportedAudio = (url) => SUPPORTED_FORMATS.has(extensionOf(url));
+const isSafeRemoteUrl = (value) => {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
 
 export const validateLibraryManifest = (manifest) => {
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
@@ -23,7 +31,7 @@ export const validateLibraryManifest = (manifest) => {
 
 const manifestTrackToModel = (entry, source) => {
   const audioUrl = entry.audioUrl || entry.audio || entry.url || entry.audioRef;
-  if (!audioUrl || !isSupportedAudio(audioUrl)) return null;
+  if (!audioUrl || !isSafeRemoteUrl(audioUrl) || !isSupportedAudio(audioUrl)) return null;
   const artists = asArray(entry.artists).length ? entry.artists : (entry.artist ? [entry.artist] : []);
   return createTrack({
     id: entry.id || entry.trackId,
@@ -35,7 +43,7 @@ const manifestTrackToModel = (entry, source) => {
     year: entry.year,
     duration: entry.durationMs ?? entry.duration,
     format: entry.format || extensionOf(audioUrl),
-    artwork: entry.artwork || entry.artworkUrl ? { url: entry.artwork || entry.artworkUrl } : null,
+    artwork: (entry.artwork || entry.artworkUrl) && isSafeRemoteUrl(entry.artwork || entry.artworkUrl) ? { url: entry.artwork || entry.artworkUrl } : null,
     folder: entry.folder,
     filename: entry.filename || audioUrl.split('/').pop(),
     metadataOrigin: entry.metadataOrigin || 'server-manifest',

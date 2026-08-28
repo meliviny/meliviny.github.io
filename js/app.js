@@ -474,7 +474,7 @@ const switchView = (view) => {
   const searchView = document.getElementById('search-view');
   const browseView = document.getElementById('browse-view');
   const homeSections = document.querySelectorAll('#main-content > section:not(#search-view):not(#browse-view)');
-  const isBrowseView = ['library', 'artists', 'albums', 'playlists', 'folders'].includes(view);
+  const isBrowseView = ['library', 'artists', 'albums', 'folders'].includes(view);
   if (searchView) searchView.hidden = view !== 'search';
   if (browseView) browseView.hidden = !isBrowseView;
   homeSections.forEach((section) => { section.hidden = view === 'search' || isBrowseView; });
@@ -485,7 +485,7 @@ const renderBrowseView = (view, tracks) => {
   const heading = document.getElementById('browse-heading');
   const results = document.getElementById('browse-results');
   if (!heading || !results) return;
-  const labels = { library: 'Library', artists: 'Artists', albums: 'Albums', playlists: 'Playlists', folders: 'Folders' };
+  const labels = { library: 'Library', artists: 'Artists', albums: 'Albums', folders: 'Folders' };
   heading.textContent = labels[view] || 'Library';
 
   const groupMap = {
@@ -741,7 +741,7 @@ const initApp = async () => {
   const clearQueueButton = document.querySelector('.clear-queue-button');
   const searchInput = document.getElementById('library-search');
   const browseRefresh = document.querySelector('.browse-refresh');
-  const browseViews = new Set(['library', 'artists', 'albums', 'playlists', 'folders']);
+  const browseViews = new Set(['library', 'artists', 'albums', 'folders']);
   const settingsRefreshLibrary = document.querySelector('.settings-refresh-library');
   const settingsPlaybackPersistence = document.getElementById('settings-playback-persistence');
   const settingsGapless = document.getElementById('settings-gapless');

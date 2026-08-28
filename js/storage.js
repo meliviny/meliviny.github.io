@@ -5,7 +5,6 @@ const DB_STORES = {
   tracks: 'tracks',
   artists: 'artists',
   albums: 'albums',
-  playlists: 'playlists',
   folders: 'folders',
   musicSources: 'musicSources',
   playbackState: 'playbackState',

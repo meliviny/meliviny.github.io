@@ -104,17 +104,6 @@ export const createAlbum = (input = {}) => {
   };
 };
 
-export const createPlaylist = (input = {}) => {
-  return {
-    id: input.id || `playlist-${slugify(input.name || 'untitled-playlist')}-${Date.now()}`,
-    name: normalizeText(input.name, 'Untitled playlist'),
-    description: normalizeText(input.description, 'No description provided'),
-    trackIds: uniqueValues(toArray(input.trackIds)).map(String),
-    createdAt: input.createdAt || new Date().toISOString(),
-    updatedAt: input.updatedAt || new Date().toISOString(),
-  };
-};
-
 export const createFolder = (input = {}) => {
   return {
     id: input.id || `folder-${slugify(input.name || input.path || 'new-folder')}-${Date.now()}`,

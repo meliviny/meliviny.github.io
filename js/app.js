@@ -10,6 +10,7 @@ import { storage } from './storage.js';
 import { LibraryEngine } from './library.js';
 import { createAppRuntime } from './ui-state.js';
 import { AudioPlayer } from './player.js';
+import { LocalSourceManager } from './local-sources.js';
 
 const appState = {
   ready: false,
@@ -31,6 +32,7 @@ const runtime = createAppRuntime({
 });
 
 let audioPlayer = null;
+let localSources = null;
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -268,6 +270,38 @@ const scanAudioFiles = async (files, library, resultsElement, emptyState) => {
   });
 };
 
+const renderConnectedSources = (sources, container) => {
+  if (!container) return;
+  container.innerHTML = '';
+  if (!sources.length) {
+    container.innerHTML = '<p class="source-help">No local folders connected.</p>';
+    return;
+  }
+  sources.forEach((source) => {
+    const row = document.createElement('div');
+    row.className = 'connected-source';
+    const state = source.requiresReconnect ? 'Reconnect required' : `${source.fileCount || 0} files`;
+    row.innerHTML = `<span><strong>${source.name}</strong><small>${state}</small></span><span class="source-row-actions"><button class="text-button refresh-source" type="button">${source.requiresReconnect ? 'Reconnect' : 'Refresh'}</button><button class="text-button remove-source" type="button">Remove</button></span>`;
+    row.querySelector('.refresh-source').addEventListener('click', async () => {
+      const result = source.requiresReconnect ? await localSources.reconnect(source.id) : await localSources.scanSource(source);
+      renderConnectedSources(localSources.sources, container);
+      if (result.source && !result.source.requiresReconnect && result.source.fileCount === undefined) {
+        const scan = await localSources.scanSource(result.source);
+        renderConnectedSources(localSources.sources, container);
+        showUnavailableNotice(`Folder reconnected. Indexed ${scan.tracks.length} track${scan.tracks.length === 1 ? '' : 's'}.`);
+      } else {
+        showUnavailableNotice(result.denied ? 'Folder permission was denied.' : `Scanned ${result.source?.fileCount || 0} audio files.`);
+      }
+    });
+    row.querySelector('.remove-source').addEventListener('click', async () => {
+      await localSources.removeSource(source.id);
+      renderConnectedSources(localSources.sources, container);
+      showUnavailableNotice('Folder connection removed. Your files were not changed.');
+    });
+    container.append(row);
+  });
+};
+
 const updatePlayerUi = (state) => {
   const track = state.track;
   const title = track?.title || 'No track loaded';
@@ -445,8 +479,13 @@ const initApp = async () => {
   const folderInput = document.getElementById('audio-folder-input');
   const libraryEmptyState = document.getElementById('library-empty-state');
   const libraryResults = document.getElementById('library-results');
+  const connectedSources = document.getElementById('connected-sources');
+  const addFolderButton = document.querySelector('.add-folder-button');
 
   audioPlayer = new AudioPlayer(audioElement, updatePlayerUi);
+  localSources = new LocalSourceManager(storage, new LibraryEngine(storage));
+  await localSources.loadSources();
+  renderConnectedSources(localSources.sources, connectedSources);
   updatePlayerUi(audioPlayer.getState());
 
   if ('serviceWorker' in navigator) {
@@ -591,6 +630,23 @@ const initApp = async () => {
   scanFolderButton?.addEventListener('click', () => folderInput?.click());
   filesInput?.addEventListener('change', () => scanAudioFiles(filesInput.files, new LibraryEngine(storage), libraryResults, libraryEmptyState));
   folderInput?.addEventListener('change', () => scanAudioFiles(folderInput.files, new LibraryEngine(storage), libraryResults, libraryEmptyState));
+  addFolderButton?.addEventListener('click', async () => {
+    if (!localSources.supportsDirectoryPicker) {
+      showUnavailableNotice('Folder access is unavailable in this browser. Use Choose files as a fallback.');
+      return;
+    }
+    try {
+      const result = await localSources.addDirectory();
+      if (result.denied) showUnavailableNotice('Folder permission was denied. No files were read.');
+      else if (result.source) {
+        const scan = await localSources.scanSource(result.source);
+        renderConnectedSources(localSources.sources, connectedSources);
+        showUnavailableNotice(`Folder connected. Indexed ${scan.tracks.length} track${scan.tracks.length === 1 ? '' : 's'}.`);
+      }
+    } catch (error) {
+      showUnavailableNotice(`Folder access failed: ${error.message}`);
+    }
+  });
   shareButton?.addEventListener('click', async () => {
     const state = audioPlayer.getState();
     if (!state.track) { showUnavailableNotice('Select a track before sharing.'); return; }

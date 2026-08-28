@@ -318,6 +318,11 @@
           </div>
           <label class="source-option"><input type="radio" name="source" value="local" checked /> <span><strong>Local library</strong><small>Files selected from this device</small></span></label>
           <label class="source-option"><input type="radio" name="source" value="server" /> <span><strong>Personal server</strong><small>Remote source configuration</small></span></label>
+          <div class="source-manager">
+            <div class="source-manager-header"><strong>Local folders</strong><button class="text-button add-folder-button" type="button">Add folder</button></div>
+            <p class="source-help">Meliviny reads selected folders in your browser. Your music never uploads.</p>
+            <div id="connected-sources" class="connected-sources"></div>
+          </div>
           <label class="dialog-field">Server URL<input id="server-url" type="url" placeholder="https://music.example.com" /></label>
           <div class="dialog-actions"><button class="text-button" value="cancel">Cancel</button><button class="primary-button source-save-button" value="default">Use source</button></div>
         </form>

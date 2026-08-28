@@ -385,13 +385,62 @@ const scanAudioFiles = async (files, library, resultsElement, emptyState) => {
     });
     resultsElement.append(row);
   });
-  renderSearchResults(indexedTracks);
+  syncIndexedTracks(indexedTracks);
 };
 
 const resolvePlayableSource = (track) => {
   const candidates = Array.isArray(track?.sources) ? track.sources.filter((source) => source && source.url) : [];
   const playable = candidates.find((source) => source.available !== false && source.accessible !== false);
   return playable || candidates[0] || null;
+};
+
+const syncIndexedTracks = (tracks = []) => {
+  const nextTracks = Array.isArray(tracks) ? tracks : [];
+  indexedTracks = [...indexedTracks.filter((existing) => !nextTracks.some((track) => track.id === existing.id)), ...nextTracks];
+  renderLibraryResults(indexedTracks, document.getElementById('library-results'), document.getElementById('library-empty-state'));
+  renderSearchResults(indexedTracks);
+  if (['library', 'artists', 'albums', 'playlists', 'folders'].includes(runtime.ui.activeSection)) {
+    renderBrowseView(runtime.ui.activeSection, indexedTracks);
+  }
+};
+
+const renderLibraryResults = (tracks, container = document.getElementById('library-results'), emptyState = document.getElementById('library-empty-state')) => {
+  if (!container) return;
+  const validTracks = tracks.filter((track) => resolvePlayableSource(track));
+  container.innerHTML = '';
+  if (!validTracks.length) {
+    if (emptyState) emptyState.hidden = false;
+    container.hidden = true;
+    return;
+  }
+
+  if (emptyState) emptyState.hidden = true;
+  container.hidden = false;
+  validTracks.forEach((track) => {
+    const source = resolvePlayableSource(track);
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'library-track-row';
+    const title = document.createElement('span');
+    title.textContent = track.title;
+    const details = document.createElement('small');
+    details.textContent = `${track.artists?.join(', ') || 'Unknown artist'} · ${track.album || 'Unknown album'} · ${track.format?.toUpperCase() || 'AUDIO'}`;
+    row.replaceChildren(title, details);
+    row.addEventListener('click', () => {
+      if (!source) {
+        showUnavailableNotice('This track does not have a valid playable source.');
+        return;
+      }
+      const queue = validTracks
+        .map((queueTrack) => ({ track: queueTrack, source: resolvePlayableSource(queueTrack) }))
+        .filter((item) => item.source);
+      const startIndex = queue.findIndex((item) => item.track.id === track.id);
+      audioPlayer.setQueue(queue, startIndex >= 0 ? startIndex : 0);
+      audioPlayer.loadTrack(track, source, { restorePosition: true });
+      document.querySelector('.player-drawer')?.classList.add('is-open');
+    });
+    container.append(row);
+  });
 };
 
 const renderSearchResults = (tracks) => {
@@ -524,9 +573,11 @@ const renderConnectedSources = (sources, container) => {
       renderConnectedSources(localSources.sources, container);
       if (result.source && !result.source.requiresReconnect && result.source.fileCount === undefined) {
         const scan = await localSources.scanSource(result.source);
+        syncIndexedTracks(scan.tracks);
         renderConnectedSources(localSources.sources, container);
         showUnavailableNotice(`Folder reconnected. Indexed ${scan.tracks.length} track${scan.tracks.length === 1 ? '' : 's'}.`);
       } else {
+        syncIndexedTracks(result.tracks || []);
         showUnavailableNotice(result.denied ? 'Folder permission was denied.' : `Scanned ${result.source?.fileCount || 0} audio files.`);
       }
     });
@@ -734,6 +785,8 @@ const initApp = async () => {
   renderServerStatus(serverLibrary.getState());
   if (quickSourceSelect) quickSourceSelect.value = runtime.ui.selectedSource;
   renderConnectedSources(localSources.sources, connectedSources);
+  renderLibraryResults(indexedTracks, libraryResults, libraryEmptyState);
+  renderSearchResults(indexedTracks);
   updatePlayerUi(audioPlayer.getState());
   renderAccountState(firebaseSync.getState());
 
@@ -857,12 +910,20 @@ const initApp = async () => {
   });
   searchInput?.addEventListener('input', () => renderSearchResults(indexedTracks));
   clearQueueButton?.addEventListener('click', () => audioPlayer.clearQueue());
-  browseRefresh?.addEventListener('click', () => renderBrowseView(runtime.ui.activeSection, indexedTracks));
+  browseRefresh?.addEventListener('click', () => {
+    renderBrowseView(runtime.ui.activeSection, indexedTracks);
+    renderLibraryResults(indexedTracks, libraryResults, libraryEmptyState);
+  });
   settingsRefreshLibrary?.addEventListener('click', async () => {
     const [localResult, serverState] = await Promise.all([
       localSources.refreshAll(),
       serverLibrary.refresh(),
     ]);
+    const mergedTracks = [
+      ...localResult.flatMap((result) => result.tracks || []),
+      ...(serverState.tracks || []),
+    ];
+    syncIndexedTracks(mergedTracks);
     renderConnectedSources(localSources.sources, connectedSources);
     renderServerTracks(serverState.tracks, libraryResults, libraryEmptyState);
     showUnavailableNotice(serverState.status === 'available' || localResult.some((result) => !result.denied) ? 'Library refreshed.' : 'Library refresh unavailable.');
@@ -951,8 +1012,14 @@ const initApp = async () => {
   });
   scanFilesButton?.addEventListener('click', () => filesInput?.click());
   scanFolderButton?.addEventListener('click', () => folderInput?.click());
-  filesInput?.addEventListener('change', () => scanAudioFiles(filesInput.files, new LibraryEngine(storage), libraryResults, libraryEmptyState));
-  folderInput?.addEventListener('change', () => scanAudioFiles(folderInput.files, new LibraryEngine(storage), libraryResults, libraryEmptyState));
+  filesInput?.addEventListener('change', () => {
+    scanAudioFiles(filesInput.files, new LibraryEngine(storage), libraryResults, libraryEmptyState);
+    renderLibraryResults(indexedTracks, libraryResults, libraryEmptyState);
+  });
+  folderInput?.addEventListener('change', () => {
+    scanAudioFiles(folderInput.files, new LibraryEngine(storage), libraryResults, libraryEmptyState);
+    renderLibraryResults(indexedTracks, libraryResults, libraryEmptyState);
+  });
   addFolderButton?.addEventListener('click', async () => {
     if (!localSources.supportsDirectoryPicker) {
       showUnavailableNotice('Folder access is unavailable in this browser. Use Choose files as a fallback.');
@@ -963,6 +1030,7 @@ const initApp = async () => {
       if (result.denied) showUnavailableNotice('Folder permission was denied. No files were read.');
       else if (result.source) {
         const scan = await localSources.scanSource(result.source);
+        syncIndexedTracks(scan.tracks);
         renderConnectedSources(localSources.sources, connectedSources);
         showUnavailableNotice(`Folder connected. Indexed ${scan.tracks.length} track${scan.tracks.length === 1 ? '' : 's'}.`);
       }
@@ -996,6 +1064,8 @@ const initApp = async () => {
       }
     });
   }
+
+  renderLibraryResults(indexedTracks, libraryResults, libraryEmptyState);
 
   accountButton?.addEventListener('click', () => accountDialog?.showModal());
   signInButton?.addEventListener('click', async () => {

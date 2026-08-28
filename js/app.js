@@ -9,6 +9,7 @@ import {
 import { storage } from './storage.js';
 import { LibraryEngine } from './library.js';
 import { createAppRuntime } from './ui-state.js';
+import { AudioPlayer } from './player.js';
 
 const appState = {
   ready: false,
@@ -28,6 +29,8 @@ const runtime = createAppRuntime({
     activeSection: 'home',
   },
 });
+
+let audioPlayer = null;
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -190,6 +193,110 @@ const showUnavailableNotice = (message) => {
   notice.dismissTimer = window.setTimeout(() => notice.classList.remove('is-visible'), 3200);
 };
 
+const formatTime = (seconds) => {
+  const safeSeconds = Math.max(0, Math.floor(Number(seconds) || 0));
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainder = String(safeSeconds % 60).padStart(2, '0');
+  return `${minutes}:${remainder}`;
+};
+
+const readAudioDuration = (file) => new Promise((resolve) => {
+  const objectUrl = URL.createObjectURL(file);
+  const probe = document.createElement('audio');
+  probe.preload = 'metadata';
+  probe.onloadedmetadata = () => {
+    const duration = Number.isFinite(probe.duration) ? Math.round(probe.duration * 1000) : 0;
+    URL.revokeObjectURL(objectUrl);
+    resolve(duration);
+  };
+  probe.onerror = () => {
+    URL.revokeObjectURL(objectUrl);
+    resolve(0);
+  };
+  probe.src = objectUrl;
+});
+
+const scanAudioFiles = async (files, library, resultsElement, emptyState) => {
+  const audioFiles = [...files].filter((file) => file.type.startsWith('audio/') || /\.(mp3|wav|flac|ogg|m4a|aac)$/i.test(file.name));
+  if (!audioFiles.length) {
+    showUnavailableNotice('No supported audio files were selected.');
+    return;
+  }
+
+  emptyState.hidden = true;
+  resultsElement.hidden = false;
+  resultsElement.textContent = `Scanning ${audioFiles.length} file${audioFiles.length === 1 ? '' : 's'}...`;
+  const tracks = [];
+
+  for (const file of audioFiles) {
+    const title = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ').trim();
+    const duration = await readAudioDuration(file);
+    const track = await library.addTrack({
+      title: title || 'Untitled track',
+      artists: [],
+      album: '',
+      duration,
+      format: file.name.split('.').pop()?.toLowerCase() || 'unknown',
+      filename: file.name,
+      folder: file.webkitRelativePath ? file.webkitRelativePath.split('/').slice(0, -1).join('/') : null,
+      metadataOrigin: 'filename',
+      sources: [{
+        id: `local-${file.name}-${file.lastModified}`,
+        type: 'local',
+        name: file.name,
+        url: URL.createObjectURL(file),
+        available: true,
+        accessible: true,
+        browserSupport: 'supported',
+      }],
+    });
+    tracks.push(track);
+  }
+
+  resultsElement.innerHTML = `<strong>${tracks.length} track${tracks.length === 1 ? '' : 's'} indexed</strong>`;
+  tracks.forEach((track) => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'library-track-row';
+    row.innerHTML = `<span>${track.title}</span><small>${track.format.toUpperCase()} · ${formatTime(track.duration / 1000)}</small>`;
+    row.addEventListener('click', () => {
+      audioPlayer.loadTrack(track, track.sources[0]);
+      document.querySelector('.player-drawer')?.classList.add('is-open');
+    });
+    resultsElement.append(row);
+  });
+};
+
+const updatePlayerUi = (state) => {
+  const track = state.track;
+  const title = track?.title || 'No track loaded';
+  const artist = track?.artistNames?.join(', ') || track?.artists?.join(', ') || 'Player ready';
+  const titleTargets = document.querySelectorAll('.player-meta h3, .mini-track-info strong');
+  const artistTargets = document.querySelectorAll('.fallback-artist, .mini-track-info span');
+  const playButtons = document.querySelectorAll('.playback-toggle');
+  const progressFills = document.querySelectorAll('.progress-fill, .mini-progress-fill');
+  const timeTargets = document.querySelectorAll('.time-row span');
+
+  titleTargets.forEach((element) => { element.textContent = title; });
+  artistTargets.forEach((element) => { element.textContent = artist; });
+  playButtons.forEach((button) => {
+    button.disabled = !track || !state.source;
+    button.textContent = state.isPlaying ? '❚❚' : '▶';
+    button.setAttribute('aria-label', state.isPlaying ? 'Pause' : 'Play');
+  });
+
+  const ratio = state.durationSeconds ? (state.positionSeconds / state.durationSeconds) * 100 : 0;
+  progressFills.forEach((element) => { element.style.width = `${Math.min(Math.max(ratio, 0), 100)}%`; });
+  if (timeTargets.length >= 2) {
+    timeTargets[0].textContent = formatTime(state.positionSeconds);
+    timeTargets[1].textContent = formatTime(state.durationSeconds);
+  }
+
+  if (state.error) {
+    showUnavailableNotice(state.error);
+  }
+};
+
 const runPhase3Diagnostics = async () => {
   const library = new LibraryEngine(storage);
 
@@ -277,6 +384,24 @@ const initApp = async () => {
   const actionButtons = document.querySelectorAll('.text-button, .player-actions button');
   const mediaCards = document.querySelectorAll('.media-card');
   const queueButton = document.querySelector('.queue-button');
+  const audioElement = document.getElementById('audio-engine');
+  const playbackToggles = document.querySelectorAll('.playback-toggle');
+  const progressBars = document.querySelectorAll('.progress-bar, .mini-progress');
+  const sourceDialog = document.getElementById('source-dialog');
+  const settingsDialog = document.getElementById('settings-dialog');
+  const sourceButton = document.querySelector('.source-button');
+  const settingsButton = document.querySelector('.meta-button:not(.source-button)');
+  const sourceSaveButton = document.querySelector('.source-save-button');
+  const settingsSaveButton = document.querySelector('.settings-save-button');
+  const scanFilesButton = document.querySelector('.scan-files-button');
+  const scanFolderButton = document.querySelector('.scan-folder-button');
+  const filesInput = document.getElementById('audio-files-input');
+  const folderInput = document.getElementById('audio-folder-input');
+  const libraryEmptyState = document.getElementById('library-empty-state');
+  const libraryResults = document.getElementById('library-results');
+
+  audioPlayer = new AudioPlayer(audioElement, updatePlayerUi);
+  updatePlayerUi(audioPlayer.getState());
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {
@@ -368,6 +493,43 @@ const initApp = async () => {
     showUnavailableNotice('Playback is not connected yet. No audio has been started.');
   }));
   queueButton?.addEventListener('click', openPlayer);
+  playbackToggles.forEach((button) => button.addEventListener('click', () => audioPlayer.togglePlayback()));
+  progressBars.forEach((bar) => bar.addEventListener('click', (event) => {
+    if (!audioPlayer?.getState().durationSeconds) {
+      return;
+    }
+
+    const bounds = bar.getBoundingClientRect();
+    const ratio = (event.clientX - bounds.left) / bounds.width;
+    audioPlayer.seekTo(audioPlayer.getState().durationSeconds * ratio);
+  }));
+
+  sourceButton?.addEventListener('click', () => sourceDialog?.showModal());
+  settingsButton?.addEventListener('click', () => {
+    const settingsTheme = document.getElementById('settings-theme-select');
+    const reducedMotionSetting = document.getElementById('reduced-motion-setting');
+    if (settingsTheme) settingsTheme.value = appState.theme;
+    if (reducedMotionSetting) reducedMotionSetting.checked = runtime.ui.reducedMotion;
+    settingsDialog?.showModal();
+  });
+  sourceSaveButton?.addEventListener('click', () => {
+    const selectedSource = document.querySelector('input[name="source"]:checked')?.value || 'local';
+    runtime.ui.selectedSource = selectedSource;
+    const sourceName = document.querySelector('.source-button strong');
+    if (sourceName) sourceName.textContent = selectedSource === 'server' ? 'Personal server' : 'Local library';
+    persistSettings();
+  });
+  settingsSaveButton?.addEventListener('click', () => {
+    const settingsTheme = document.getElementById('settings-theme-select');
+    const reducedMotionSetting = document.getElementById('reduced-motion-setting');
+    if (settingsTheme) applyThemePreference(settingsTheme.value);
+    if (reducedMotionSetting) runtime.ui.reducedMotion = reducedMotionSetting.checked;
+    persistSettings();
+  });
+  scanFilesButton?.addEventListener('click', () => filesInput?.click());
+  scanFolderButton?.addEventListener('click', () => folderInput?.click());
+  filesInput?.addEventListener('change', () => scanAudioFiles(filesInput.files, new LibraryEngine(storage), libraryResults, libraryEmptyState));
+  folderInput?.addEventListener('change', () => scanAudioFiles(folderInput.files, new LibraryEngine(storage), libraryResults, libraryEmptyState));
 
   if (mobileMenuToggle) {
     mobileMenuToggle.addEventListener('click', () => {
@@ -412,5 +574,6 @@ window.meliviny = {
   runtime,
   storage,
   library: new LibraryEngine(storage),
+  loadTrack: (track, source) => audioPlayer?.loadTrack(track, source) || false,
   runPhase3Diagnostics,
 };

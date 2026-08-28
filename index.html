@@ -22,6 +22,7 @@
   </head>
   <body data-theme="system" data-accent="violet">
     <div id="app" class="app-shell" data-ready="false" aria-live="polite">
+      <audio id="audio-engine" preload="metadata"></audio>
       <aside class="sidebar" aria-label="Primary navigation" data-collapsed="false">
         <div class="sidebar-top">
           <div class="brand-block" aria-label="Meliviny brand">
@@ -54,10 +55,10 @@
         </nav>
 
         <div class="sidebar-section sidebar-lower">
-          <div class="meta-item">
+          <button class="meta-item meta-button source-button" type="button" aria-haspopup="dialog" aria-controls="source-dialog">
             <span class="meta-label">Source</span>
             <strong>Local library</strong>
-          </div>
+          </button>
           <div class="meta-item">
             <span class="meta-label">Account</span>
             <strong>Personal</strong>
@@ -122,7 +123,7 @@
               <div>
                 <h3>No listening history yet</h3>
                 <p>Recently played tracks will appear here after a music source is connected.</p>
-              </article>
+              </div>
             </div>
           </section>
 
@@ -189,13 +190,20 @@
               <button class="text-button" type="button">Manage</button>
             </header>
 
-            <div class="empty-state" aria-live="polite">
+            <div class="empty-state" aria-live="polite" id="library-empty-state">
               <div class="empty-icon" aria-hidden="true">♪</div>
               <div>
                 <h3>Library is ready for your collection</h3>
                 <p>Local and personal server sources will appear here as they are connected.</p>
+                <div class="library-actions">
+                  <button class="primary-button scan-files-button" type="button">Choose files</button>
+                  <button class="text-button scan-folder-button" type="button">Choose folder</button>
+                </div>
               </div>
             </div>
+            <input id="audio-files-input" type="file" accept="audio/*" multiple hidden />
+            <input id="audio-folder-input" type="file" accept="audio/*" webkitdirectory directory multiple hidden />
+            <div class="library-results" id="library-results" hidden aria-live="polite"></div>
           </section>
         </main>
       </div>
@@ -232,7 +240,7 @@
         <div class="player-controls" aria-label="Player controls">
           <button class="player-control" type="button" aria-label="Shuffle" disabled>⇄</button>
           <button class="player-control" type="button" aria-label="Previous" disabled>⏮</button>
-          <button class="player-control primary" type="button" aria-label="Play" disabled>▶</button>
+          <button class="player-control primary playback-toggle" type="button" aria-label="Play" disabled>▶</button>
           <button class="player-control" type="button" aria-label="Next" disabled>⏭</button>
           <button class="player-control" type="button" aria-label="Repeat" disabled>↻</button>
         </div>
@@ -265,7 +273,7 @@
 
         <div class="mini-controls" aria-label="Mini player controls">
           <button class="mini-button" type="button" aria-label="Previous track" disabled>⏮</button>
-          <button class="mini-button primary" type="button" aria-label="Play or pause" disabled>▶</button>
+          <button class="mini-button primary playback-toggle" type="button" aria-label="Play or pause" disabled>▶</button>
           <button class="mini-button" type="button" aria-label="Next track" disabled>⏭</button>
           <button class="mini-button queue-button" type="button" aria-label="Queue">☰</button>
         </div>
@@ -289,6 +297,37 @@
           <span>Playlists</span>
         </button>
       </nav>
+
+      <dialog class="app-dialog" id="source-dialog" aria-labelledby="source-dialog-title">
+        <form method="dialog" class="dialog-card">
+          <div class="dialog-header">
+            <div>
+              <p class="eyebrow">Music source</p>
+              <h2 id="source-dialog-title">Choose a source</h2>
+            </div>
+            <button class="icon-button" value="cancel" aria-label="Close source dialog">✕</button>
+          </div>
+          <label class="source-option"><input type="radio" name="source" value="local" checked /> <span><strong>Local library</strong><small>Files selected from this device</small></span></label>
+          <label class="source-option"><input type="radio" name="source" value="server" /> <span><strong>Personal server</strong><small>Remote source configuration</small></span></label>
+          <label class="dialog-field">Server URL<input id="server-url" type="url" placeholder="https://music.example.com" /></label>
+          <div class="dialog-actions"><button class="text-button" value="cancel">Cancel</button><button class="primary-button source-save-button" value="default">Use source</button></div>
+        </form>
+      </dialog>
+
+      <dialog class="app-dialog" id="settings-dialog" aria-labelledby="settings-dialog-title">
+        <form method="dialog" class="dialog-card">
+          <div class="dialog-header">
+            <div>
+              <p class="eyebrow">Preferences</p>
+              <h2 id="settings-dialog-title">Settings</h2>
+            </div>
+            <button class="icon-button" value="cancel" aria-label="Close settings dialog">✕</button>
+          </div>
+          <label class="dialog-field">Theme<select id="settings-theme-select"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+          <label class="source-option"><input id="reduced-motion-setting" type="checkbox" /> <span><strong>Reduce motion</strong><small>Prefer shorter interface transitions</small></span></label>
+          <div class="dialog-actions"><button class="text-button" value="cancel">Cancel</button><button class="primary-button settings-save-button" value="default">Save settings</button></div>
+        </form>
+      </dialog>
     </div>
 
     <script type="module" src="js/app.js"></script>

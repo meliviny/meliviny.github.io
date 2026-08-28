@@ -373,15 +373,16 @@ const scanAudioFiles = async (files, library, resultsElement, emptyState) => {
     const details = document.createElement('small');
     details.textContent = `${track.format.toUpperCase()} · ${formatTime(track.duration / 1000)}`;
     row.replaceChildren(title, details);
-    row.addEventListener('click', () => {
+    row.addEventListener('click', async () => {
       const source = resolvePlayableSource(track) || track.sources?.[0];
       if (!source) {
         showUnavailableNotice('This track does not have a valid playable source.');
         return;
       }
-      audioPlayer.setQueue(tracks.map((queueTrack) => ({ track: queueTrack, source: resolvePlayableSource(queueTrack) || queueTrack.sources?.[0] })).filter((item) => item.source), tracks.indexOf(track));
-      audioPlayer.loadTrack(track, source, { restorePosition: true });
-      document.querySelector('.player-drawer')?.classList.add('is-open');
+      const queue = tracks
+        .map((queueTrack) => ({ track: queueTrack, source: resolvePlayableSource(queueTrack) || queueTrack.sources?.[0] }))
+        .filter((item) => item.source);
+      await playTrackAndQueue(track, source, queue, queue.findIndex((item) => item.track.id === track.id));
     });
     resultsElement.append(row);
   });
@@ -392,6 +393,27 @@ const resolvePlayableSource = (track) => {
   const candidates = Array.isArray(track?.sources) ? track.sources.filter((source) => source && source.url) : [];
   const playable = candidates.find((source) => source.available !== false && source.accessible !== false);
   return playable || candidates[0] || null;
+};
+
+const hasConnectedMusicSource = () => {
+  const localConnected = Array.isArray(localSources?.sources)
+    && localSources.sources.some((source) => source && source.available !== false && source.accessible !== false);
+  const serverState = serverLibrary?.getState?.();
+  const serverConnected = Boolean(serverState?.source?.enabled) && Array.isArray(serverState?.tracks) && serverState.tracks.length > 0;
+  return Boolean(localConnected || serverConnected);
+};
+
+const playTrackAndQueue = async (track, source, queue = [{ track, source }], startIndex = 0) => {
+  if (!track || !source?.url) {
+    showUnavailableNotice('This track does not have a valid playable source.');
+    return false;
+  }
+
+  audioPlayer.setQueue(queue, startIndex);
+  const loaded = await audioPlayer.loadTrack(track, source, { restorePosition: true });
+  if (loaded) await audioPlayer.play();
+  document.querySelector('.player-drawer')?.classList.add('is-open');
+  return loaded;
 };
 
 const syncIndexedTracks = (tracks = []) => {
@@ -426,7 +448,7 @@ const renderLibraryResults = (tracks, container = document.getElementById('libra
     const details = document.createElement('small');
     details.textContent = `${track.artists?.join(', ') || 'Unknown artist'} · ${track.album || 'Unknown album'} · ${track.format?.toUpperCase() || 'AUDIO'}`;
     row.replaceChildren(title, details);
-    row.addEventListener('click', () => {
+    row.addEventListener('click', async () => {
       if (!source) {
         showUnavailableNotice('This track does not have a valid playable source.');
         return;
@@ -435,9 +457,7 @@ const renderLibraryResults = (tracks, container = document.getElementById('libra
         .map((queueTrack) => ({ track: queueTrack, source: resolvePlayableSource(queueTrack) }))
         .filter((item) => item.source);
       const startIndex = queue.findIndex((item) => item.track.id === track.id);
-      audioPlayer.setQueue(queue, startIndex >= 0 ? startIndex : 0);
-      audioPlayer.loadTrack(track, source, { restorePosition: true });
-      document.querySelector('.player-drawer')?.classList.add('is-open');
+      await playTrackAndQueue(track, source, queue, startIndex >= 0 ? startIndex : 0);
     });
     container.append(row);
   });
@@ -457,14 +477,13 @@ const renderSearchResults = (tracks) => {
     const details = document.createElement('small');
     details.textContent = `${track.artists?.join(', ') || 'Unknown artist'} · ${track.album || 'Unknown album'}`;
     row.replaceChildren(title, details);
-    row.addEventListener('click', () => {
+    row.addEventListener('click', async () => {
       const source = resolvePlayableSource(track);
       if (!source) {
         showUnavailableNotice('This track does not have a valid playable source.');
         return;
       }
-      audioPlayer.setQueue([{ track, source }]);
-      audioPlayer.loadTrack(track, source, { restorePosition: true });
+      await playTrackAndQueue(track, source, [{ track, source }], 0);
     });
     results.append(row);
   });
@@ -520,7 +539,7 @@ const renderBrowseView = (view, tracks) => {
       details.textContent = 'No tracks available';
     }
     row.replaceChildren(title, details);
-    row.addEventListener('click', () => {
+    row.addEventListener('click', async () => {
       if (!matches.length) return;
       const queue = matches
         .map((track) => {
@@ -536,8 +555,7 @@ const renderBrowseView = (view, tracks) => {
       const startIndex = selectedIndex >= 0 ? selectedIndex : 0;
       const firstTrack = queue[startIndex].track;
       const firstSource = queue[startIndex].source;
-      audioPlayer.setQueue(queue, startIndex);
-      audioPlayer.loadTrack(firstTrack, firstSource, { restorePosition: true });
+      await playTrackAndQueue(firstTrack, firstSource, queue, startIndex);
     });
     results.append(row);
   });
@@ -616,13 +634,11 @@ const renderServerTracks = (tracks, resultsElement, emptyState) => {
     const details = document.createElement('small');
     details.textContent = `${track.artists?.join(', ') || 'Unknown artist'} · ${track.format.toUpperCase()}`;
     row.replaceChildren(title, details);
-    row.addEventListener('click', () => {
+    row.addEventListener('click', async () => {
       const queue = tracks
         .map((queueTrack) => ({ track: queueTrack, source: resolvePlayableSource(queueTrack) || queueTrack.sources?.find((candidate) => candidate.type === 'server') || queueTrack.sources?.[0] }))
         .filter((item) => item.source);
-      audioPlayer.setQueue(queue, tracks.indexOf(track));
-      audioPlayer.loadTrack(track, source, { restorePosition: true });
-      document.querySelector('.player-drawer')?.classList.add('is-open');
+      await playTrackAndQueue(track, source, queue, tracks.indexOf(track));
     });
     resultsElement.append(row);
   });
@@ -959,7 +975,9 @@ const initApp = async () => {
   miniArt?.addEventListener('click', openPlayer);
   primaryButton?.addEventListener('click', () => document.getElementById('library-heading')?.scrollIntoView({ behavior: 'smooth' }));
   actionButtons.forEach((button) => button.addEventListener('click', () => {
-    showUnavailableNotice('This library action will be available when a music source is connected.');
+    if (!hasConnectedMusicSource()) {
+      showUnavailableNotice('This library action will be available when a music source is connected.');
+    }
   }));
   mediaCards.forEach((card) => card.addEventListener('click', () => {
     showUnavailableNotice('Playback is not connected yet. No audio has been started.');

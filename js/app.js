@@ -1198,6 +1198,9 @@ const initApp = async () => {
       }
 
       const isOpen = sidebar.classList.toggle('is-open');
+      if (window.innerWidth <= 1100) {
+        sidebar.dataset.collapsed = String(!isOpen);
+      }
       sidebar.setAttribute('aria-hidden', String(!isOpen));
     });
   }

@@ -88,6 +88,13 @@ const hexToHsl = (hex) => {
   };
 };
 
+const syncAccentSelection = (value) => {
+  document.querySelectorAll('.accent-swatch').forEach((button) => {
+    const isSelected = value !== 'custom' && button.dataset.accent === value;
+    button.classList.toggle('is-selected', isSelected);
+  });
+};
+
 const applyAccentStyle = (value) => {
   const root = document.body;
   const customInput = document.getElementById('custom-accent');
@@ -99,7 +106,9 @@ const applyAccentStyle = (value) => {
     if (customInput) {
       customInput.value = value === 'violet' ? '#8b5cf6' : value === 'teal' ? '#2dd4bf' : value === 'rose' ? '#fb7185' : '#fbbf24';
     }
+    syncAccentSelection(value);
     runtime.ui.accent = value;
+    appState.accent = value;
     return;
   }
 
@@ -108,7 +117,9 @@ const applyAccentStyle = (value) => {
   root.dataset.accent = 'custom';
   root.style.setProperty('--base-hue', String(h));
   root.style.setProperty('--base-sat', '80%');
+  syncAccentSelection('custom');
   runtime.ui.accent = 'custom';
+  appState.accent = 'custom';
 };
 
 const persistSettings = () => {
@@ -679,7 +690,8 @@ const initApp = async () => {
     const storedSettings = await library.getSettings();
     if (storedSettings) {
       appState.theme = storedSettings.theme || appState.theme;
-      appState.accent = storedSettings.accent || appState.accent;
+      const storedAccent = storedSettings.customAccent ? 'custom' : (storedSettings.accent || appState.accent);
+      appState.accent = storedAccent;
       if (customAccentInput && storedSettings.customAccent) {
         customAccentInput.value = storedSettings.customAccent;
       }

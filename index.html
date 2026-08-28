@@ -133,23 +133,12 @@
               <button class="text-button" type="button">All artists</button>
             </header>
 
-            <div class="artist-grid">
-              <article class="artist-chip">
-                <div class="artist-avatar avatar-one" aria-hidden="true"></div>
-                <span>Nova Vale</span>
-              </article>
-              <article class="artist-chip">
-                <div class="artist-avatar avatar-two" aria-hidden="true"></div>
-                <span>Rhea Bloom</span>
-              </article>
-              <article class="artist-chip">
-                <div class="artist-avatar avatar-three" aria-hidden="true"></div>
-                <span>North Haze</span>
-              </article>
-              <article class="artist-chip">
-                <div class="artist-avatar avatar-four" aria-hidden="true"></div>
-                <span>Echo Harbor</span>
-              </article>
+            <div class="empty-state" aria-live="polite">
+              <div class="empty-icon" aria-hidden="true">◌</div>
+              <div>
+                <h3>No artists indexed</h3>
+                <p>Artists will appear here after a local music folder is scanned.</p>
+              </div>
             </div>
           </section>
 
@@ -159,28 +148,12 @@
               <button class="text-button" type="button">Browse</button>
             </header>
 
-            <div class="playlist-grid">
-              <article class="playlist-card">
-                <div class="playlist-cover cover-one" aria-hidden="true"></div>
-                <div>
-                  <h3>Afterglow</h3>
-                  <p>18 tracks</p>
-                </div>
-              </article>
-              <article class="playlist-card">
-                <div class="playlist-cover cover-two" aria-hidden="true"></div>
-                <div>
-                  <h3>Late Shift</h3>
-                  <p>12 tracks</p>
-                </div>
-              </article>
-              <article class="playlist-card">
-                <div class="playlist-cover cover-three" aria-hidden="true"></div>
-                <div>
-                  <h3>Peaks</h3>
-                  <p>8 tracks</p>
-                </div>
-              </article>
+            <div class="empty-state" aria-live="polite">
+              <div class="empty-icon" aria-hidden="true">≡</div>
+              <div>
+                <h3>No local playlists found</h3>
+                <p>Directory-based playlists will appear after a local folder is scanned.</p>
+              </div>
             </div>
           </section>
 

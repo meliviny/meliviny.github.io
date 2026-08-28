@@ -1,11 +1,4 @@
-import {
-  createAppSettings,
-  createListeningHistory,
-  createPlaybackState,
-  createQueue,
-  createTrack,
-  matchTrackIdentity,
-} from './models.js';
+import { createAppSettings } from './models.js';
 import { storage } from './storage.js';
 import { LibraryEngine } from './library.js';
 import { createAppRuntime } from './ui-state.js';
@@ -367,66 +360,6 @@ const updatePlayerUi = (state) => {
   }
 };
 
-const runPhase3Diagnostics = async () => {
-  const library = new LibraryEngine(storage);
-
-  const fallbackSettings = createAppSettings({
-    theme: 'dark',
-    accent: 'teal',
-    reducedMotion: true,
-    sidebarCollapsed: false,
-    ui: { selectedSource: 'local', compactMode: false, showQueue: true },
-  });
-
-  const trackA = createTrack({
-    title: 'Song',
-    artists: ['Aster Vale'],
-    album: 'Night Shift',
-    year: 2024,
-    duration: 214000,
-    filename: 'Song.mp3',
-    folder: '/Music/Night Shift',
-    sources: [{ id: 'local-1', type: 'local', url: '/music/Song.mp3', name: 'Song.mp3', available: true }],
-  });
-
-  const trackB = createTrack({
-    title: 'Song',
-    artists: ['Aster Vale'],
-    album: 'Night Shift',
-    year: 2024,
-    duration: 214000,
-    filename: 'Song.mp3',
-    folder: '/server/library',
-    sources: [{ id: 'server-1', type: 'server', url: 'https://example.com/Song.mp3', name: 'Song.mp3', available: true }],
-  });
-
-  const duplicateMatch = matchTrackIdentity(trackA, trackB);
-  const playbackState = createPlaybackState({ currentTrackId: trackA.id, positionMs: 120000, durationMs: 214000, volume: 0.75 });
-  const queue = createQueue({ id: 'default-queue', items: [trackA.id, trackB.id], currentIndex: 0 });
-  const history = createListeningHistory({ trackId: trackA.id, sourceId: 'local-1', positionMs: 120000, completionRatio: 0.6 });
-
-  const settingsSaved = await library.saveSettings(fallbackSettings);
-  const settingsRead = await library.getSettings();
-  const playbackSaved = await library.savePlaybackState(playbackState);
-  const playbackRead = await library.getPlaybackState();
-  const queueSaved = await library.saveQueue(queue);
-  const queueRead = await library.getQueue('default-queue');
-  const historySaved = await library.saveListeningHistory(history);
-  const historyRead = await library.getHistory();
-
-  return {
-    trackCreated: !!trackA.id,
-    readTrackWorks: !!(await library.getTrack(trackA.id)) || true,
-    settingsPersisted: settingsSaved.id === settingsRead.id,
-    playbackPersisted: playbackSaved.currentTrackId === playbackRead.currentTrackId,
-    queuePersisted: queueSaved.items.join('|') === queueRead.items.join('|'),
-    historyPersisted: historySaved.trackId === historyRead[0]?.trackId,
-    duplicateMatch,
-    invalidMetadata: !!createTrack({ title: '', artists: [], album: '', filename: '', folder: '' }).id,
-    storageFallback: storage.useFallback || false,
-  };
-};
-
 const initApp = async () => {
   const root = document.getElementById('app');
 
@@ -721,5 +654,4 @@ window.meliviny = {
   storage,
   library: new LibraryEngine(storage),
   loadTrack: (track, source) => audioPlayer?.loadTrack(track, source) || false,
-  runPhase3Diagnostics,
 };

@@ -170,6 +170,26 @@ const handleMobileSidebar = () => {
   sidebar.style.display = shouldOpen ? 'flex' : 'none';
 };
 
+const showUnavailableNotice = (message) => {
+  const root = document.getElementById('app');
+  if (!root) {
+    return;
+  }
+
+  let notice = document.querySelector('.app-notice');
+  if (!notice) {
+    notice = document.createElement('div');
+    notice.className = 'app-notice';
+    notice.setAttribute('role', 'status');
+    root.append(notice);
+  }
+
+  notice.textContent = message;
+  notice.classList.add('is-visible');
+  window.clearTimeout(notice.dismissTimer);
+  notice.dismissTimer = window.setTimeout(() => notice.classList.remove('is-visible'), 3200);
+};
+
 const runPhase3Diagnostics = async () => {
   const library = new LibraryEngine(storage);
 
@@ -253,6 +273,10 @@ const initApp = async () => {
   const playerDrawer = document.querySelector('.player-drawer');
   const playerClose = document.querySelector('.player-close');
   const miniArt = document.querySelector('.mini-art');
+  const primaryButton = document.querySelector('.primary-button');
+  const actionButtons = document.querySelectorAll('.text-button, .player-actions button');
+  const mediaCards = document.querySelectorAll('.media-card');
+  const queueButton = document.querySelector('.queue-button');
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {
@@ -336,6 +360,14 @@ const initApp = async () => {
   const closePlayer = () => playerDrawer?.classList.remove('is-open');
   playerClose?.addEventListener('click', closePlayer);
   miniArt?.addEventListener('click', openPlayer);
+  primaryButton?.addEventListener('click', () => document.getElementById('library-heading')?.scrollIntoView({ behavior: 'smooth' }));
+  actionButtons.forEach((button) => button.addEventListener('click', () => {
+    showUnavailableNotice('This library action will be available when a music source is connected.');
+  }));
+  mediaCards.forEach((card) => card.addEventListener('click', () => {
+    showUnavailableNotice('Playback is not connected yet. No audio has been started.');
+  }));
+  queueButton?.addEventListener('click', openPlayer);
 
   if (mobileMenuToggle) {
     mobileMenuToggle.addEventListener('click', () => {

@@ -37,6 +37,7 @@ const runtime = createAppRuntime({
 let audioPlayer = null;
 let localSources = null;
 let serverLibrary = null;
+let indexedTracks = [];
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -120,6 +121,15 @@ const persistSettings = () => {
     customAccent: customInput?.value || null,
     reducedMotion: runtime.ui.reducedMotion,
     sidebarCollapsed: runtime.ui.sidebarCollapsed,
+    sourcePreference: runtime.ui.selectedSource,
+    playback: {
+      repeatMode: document.getElementById('repeat-select')?.value || 'off',
+      shuffle: Boolean(audioPlayer?.getState().shuffle),
+      monoMode: Boolean(document.getElementById('mono-toggle')?.checked),
+      gapless: Boolean(document.getElementById('settings-gapless')?.checked),
+      persistPosition: document.getElementById('settings-playback-persistence')?.checked !== false,
+      eqPreset: document.getElementById('eq-select')?.value || 'flat',
+    },
     ui: { selectedSource: runtime.ui.selectedSource, compactMode: false, showQueue: true },
   })).catch((error) => {
     runtime.errors.push({ type: 'settings', message: error.message });
@@ -324,6 +334,8 @@ const scanAudioFiles = async (files, library, resultsElement, emptyState) => {
     tracks.push(track);
   }
 
+  indexedTracks = [...indexedTracks.filter((existing) => !tracks.some((track) => track.id === existing.id)), ...tracks];
+
   resultsElement.innerHTML = `<strong>${tracks.length} track${tracks.length === 1 ? '' : 's'} indexed</strong>`;
   tracks.forEach((track) => {
     const row = document.createElement('button');
@@ -336,6 +348,55 @@ const scanAudioFiles = async (files, library, resultsElement, emptyState) => {
       document.querySelector('.player-drawer')?.classList.add('is-open');
     });
     resultsElement.append(row);
+  });
+  renderSearchResults(indexedTracks);
+};
+
+const renderSearchResults = (tracks) => {
+  const results = document.getElementById('search-results');
+  if (!results) return;
+  const query = document.getElementById('library-search')?.value.trim().toLowerCase() || '';
+  const matching = tracks.filter((track) => [track.title, track.album, ...(track.artists || [])].join(' ').toLowerCase().includes(query));
+  results.innerHTML = matching.length ? '' : '<p class="source-help">No matching tracks.</p>';
+  matching.forEach((track) => {
+    const row = document.createElement('button');
+    row.type = 'button'; row.className = 'library-track-row';
+    row.innerHTML = `<span>${track.title}</span><small>${track.artists?.join(', ') || 'Unknown artist'} · ${track.album || 'Unknown album'}</small>`;
+    row.addEventListener('click', () => { const source = track.sources?.find((item) => item.available) || track.sources?.[0]; audioPlayer.setQueue([{ track, source }]); audioPlayer.loadTrack(track, source, { restorePosition: true }); });
+    results.append(row);
+  });
+};
+
+const switchView = (view) => {
+  const searchView = document.getElementById('search-view');
+  const browseView = document.getElementById('browse-view');
+  const homeSections = document.querySelectorAll('#main-content > section:not(#search-view):not(#browse-view)');
+  const isBrowseView = ['library', 'artists', 'albums', 'playlists', 'folders'].includes(view);
+  if (searchView) searchView.hidden = view !== 'search';
+  if (browseView) browseView.hidden = !isBrowseView;
+  homeSections.forEach((section) => { section.hidden = view === 'search' || isBrowseView; });
+  if (view === 'search') document.getElementById('library-search')?.focus();
+};
+
+const renderBrowseView = (view, tracks) => {
+  const heading = document.getElementById('browse-heading');
+  const results = document.getElementById('browse-results');
+  if (!heading || !results) return;
+  const labels = { library: 'Library', artists: 'Artists', albums: 'Albums', playlists: 'Playlists', folders: 'Folders' };
+  heading.textContent = labels[view] || 'Library';
+  const groups = view === 'artists'
+    ? [...new Set(tracks.flatMap((track) => track.artists || []))].sort()
+    : view === 'albums'
+      ? [...new Set(tracks.map((track) => track.album || 'Unknown album'))].sort()
+      : view === 'folders'
+        ? [...new Set(tracks.map((track) => track.folder || 'Root'))].sort()
+        : tracks.map((track) => track.title);
+  results.innerHTML = groups.length ? '' : '<div class="empty-state"><div class="empty-icon" aria-hidden="true">♪</div><div><h3>No music indexed</h3><p>Connect a source or scan local files to populate this view.</p></div></div>';
+  groups.forEach((group) => {
+    const row = document.createElement('div');
+    row.className = 'library-track-row';
+    row.textContent = group;
+    results.append(row);
   });
 };
 
@@ -382,6 +443,7 @@ const renderServerStatus = (state) => {
 
 const renderServerTracks = (tracks, resultsElement, emptyState) => {
   if (!tracks.length || !resultsElement) return;
+  indexedTracks = [...indexedTracks.filter((existing) => !tracks.some((track) => track.id === existing.id)), ...tracks];
   emptyState.hidden = true;
   resultsElement.hidden = false;
   resultsElement.innerHTML = `<strong>${tracks.length} server track${tracks.length === 1 ? '' : 's'} available</strong>`;
@@ -506,6 +568,18 @@ const initApp = async () => {
   const nextToggles = document.querySelectorAll('.next-toggle');
   const shareButton = document.getElementById('share-button');
   const fileInfoButton = document.getElementById('file-info-button');
+  const quickSourceSelect = document.getElementById('quick-source-select');
+  const clearQueueButton = document.querySelector('.clear-queue-button');
+  const searchInput = document.getElementById('library-search');
+  const browseRefresh = document.querySelector('.browse-refresh');
+  const browseViews = new Set(['library', 'artists', 'albums', 'playlists', 'folders']);
+  const settingsRefreshLibrary = document.querySelector('.settings-refresh-library');
+  const settingsPlaybackPersistence = document.getElementById('settings-playback-persistence');
+  const settingsGapless = document.getElementById('settings-gapless');
+  const settingsEq = document.getElementById('settings-eq-select');
+  const settingsMono = document.getElementById('settings-mono');
+  const playerArtwork = document.querySelector('.player-art');
+  const miniPlayer = document.querySelector('.mini-player');
   const sourceDialog = document.getElementById('source-dialog');
   const settingsDialog = document.getElementById('settings-dialog');
   const sourceButton = document.querySelector('.source-button');
@@ -532,12 +606,14 @@ const initApp = async () => {
   const refreshServerButton = document.querySelector('.refresh-server-button');
   const serverDetailsButton = document.querySelector('.server-details-button');
 
-  audioPlayer = new AudioPlayer(audioElement, updatePlayerUi);
+  audioPlayer = new AudioPlayer(audioElement, updatePlayerUi, storage);
   localSources = new LocalSourceManager(storage, new LibraryEngine(storage));
   serverLibrary = new ServerLibraryManager(storage, new LibraryEngine(storage));
   await localSources.loadSources();
   await serverLibrary.initialize();
+  indexedTracks = await new LibraryEngine(storage).listTracks();
   renderServerStatus(serverLibrary.getState());
+  if (quickSourceSelect) quickSourceSelect.value = runtime.ui.selectedSource;
   renderConnectedSources(localSources.sources, connectedSources);
   updatePlayerUi(audioPlayer.getState());
   renderAccountState(firebaseSync.getState());
@@ -563,6 +639,12 @@ const initApp = async () => {
       }
       applyThemePreference(appState.theme);
       applyAccentStyle(appState.accent);
+      if (quickSourceSelect) quickSourceSelect.value = storedSettings.sourcePreference || runtime.ui.selectedSource;
+      if (repeatSelect && storedSettings.playback?.repeatMode) repeatSelect.value = storedSettings.playback.repeatMode;
+      if (monoToggle) monoToggle.checked = Boolean(storedSettings.playback?.monoMode);
+      if (eqSelect && storedSettings.playback?.eqPreset) eqSelect.value = storedSettings.playback.eqPreset;
+      if (settingsPlaybackPersistence) settingsPlaybackPersistence.checked = storedSettings.playback?.persistPosition !== false;
+      if (settingsGapless) settingsGapless.checked = Boolean(storedSettings.playback?.gapless);
     } else {
       applyThemePreference(appState.theme);
       applyAccentStyle(appState.accent);
@@ -616,6 +698,8 @@ const initApp = async () => {
     item.addEventListener('click', () => {
       mobileNavItems.forEach((navItem) => navItem.classList.toggle('active', navItem === item));
       runtime.ui.activeSection = item.getAttribute('aria-label')?.toLowerCase() || 'home';
+      switchView(runtime.ui.activeSection === 'search' ? 'search' : 'home');
+      if (browseViews.has(runtime.ui.activeSection)) { switchView(runtime.ui.activeSection); renderBrowseView(runtime.ui.activeSection, indexedTracks); }
       const target = document.getElementById(`${runtime.ui.activeSection}-heading`);
       target?.scrollIntoView({ behavior: runtime.ui.reducedMotion ? 'auto' : 'smooth', block: 'start' });
     });
@@ -626,13 +710,62 @@ const initApp = async () => {
       desktopNavItems.forEach((navItem) => navItem.classList.toggle('active', navItem === item));
       const label = item.querySelector('.nav-label')?.textContent?.toLowerCase() || 'home';
       runtime.ui.activeSection = label;
+      switchView(label === 'search' ? 'search' : 'home');
+      if (browseViews.has(label)) { switchView(label); renderBrowseView(label, indexedTracks); }
       const target = document.getElementById(`${label}-heading`);
       target?.scrollIntoView({ behavior: runtime.ui.reducedMotion ? 'auto' : 'smooth', block: 'start' });
     });
   });
 
+  quickSourceSelect?.addEventListener('change', () => {
+    runtime.ui.selectedSource = quickSourceSelect.value;
+    const visible = quickSourceSelect.value === 'local'
+      ? indexedTracks.filter((track) => track.sources?.some((source) => source.type === 'local'))
+      : quickSourceSelect.value === 'server'
+        ? indexedTracks.filter((track) => track.sources?.some((source) => source.type === 'server'))
+        : indexedTracks;
+    renderSearchResults(visible);
+    persistSettings();
+  });
+  searchInput?.addEventListener('input', () => renderSearchResults(indexedTracks));
+  clearQueueButton?.addEventListener('click', () => audioPlayer.clearQueue());
+  browseRefresh?.addEventListener('click', () => renderBrowseView(runtime.ui.activeSection, indexedTracks));
+  settingsRefreshLibrary?.addEventListener('click', async () => {
+    const [localResult, serverState] = await Promise.all([
+      localSources.refreshAll(),
+      serverLibrary.refresh(),
+    ]);
+    renderConnectedSources(localSources.sources, connectedSources);
+    renderServerTracks(serverState.tracks, libraryResults, libraryEmptyState);
+    showUnavailableNotice(serverState.status === 'available' || localResult.some((result) => !result.denied) ? 'Library refreshed.' : 'Library refresh unavailable.');
+  });
+
+  const addSwipe = (element, onLeft, onRight) => {
+    if (!element) return;
+    let startX = 0; let startY = 0;
+    element.addEventListener('touchstart', (event) => { if (event.touches.length === 1) { startX = event.touches[0].clientX; startY = event.touches[0].clientY; } }, { passive: true });
+    element.addEventListener('touchend', (event) => {
+      const touch = event.changedTouches[0];
+      const dx = touch.clientX - startX; const dy = touch.clientY - startY;
+      if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+      if (dx < 0) onLeft(); else onRight();
+    }, { passive: true });
+  };
+  addSwipe(playerArtwork, () => audioPlayer.previous(), () => audioPlayer.next());
+  addSwipe(miniPlayer, () => audioPlayer.previous(), () => audioPlayer.next());
+
   const openPlayer = () => playerDrawer?.classList.add('is-open');
   const closePlayer = () => playerDrawer?.classList.remove('is-open');
+  const addPullDownToClose = (element) => {
+    if (!element) return;
+    let startY = 0;
+    element.addEventListener('touchstart', (event) => { if (event.touches.length === 1) startY = event.touches[0].clientY; }, { passive: true });
+    element.addEventListener('touchend', (event) => {
+      const distance = event.changedTouches[0].clientY - startY;
+      if (distance > 80) closePlayer();
+    }, { passive: true });
+  };
+  addPullDownToClose(playerDrawer);
   playerClose?.addEventListener('click', closePlayer);
   miniArt?.addEventListener('click', openPlayer);
   primaryButton?.addEventListener('click', () => document.getElementById('library-heading')?.scrollIntoView({ behavior: 'smooth' }));
@@ -682,6 +815,9 @@ const initApp = async () => {
     const reducedMotionSetting = document.getElementById('reduced-motion-setting');
     if (settingsTheme) applyThemePreference(settingsTheme.value);
     if (reducedMotionSetting) runtime.ui.reducedMotion = reducedMotionSetting.checked;
+    if (settingsEq) eqSelect.value = settingsEq.value;
+    if (settingsEq) audioPlayer.setEqPreset(settingsEq.value);
+    if (settingsMono) { monoToggle.checked = settingsMono.checked; audioPlayer.setMono(settingsMono.checked); }
     persistSettings();
   });
   scanFilesButton?.addEventListener('click', () => filesInput?.click());

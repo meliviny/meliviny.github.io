@@ -59,11 +59,11 @@
             <span class="meta-label">Source</span>
             <strong>Local library</strong>
           </button>
-          <div class="meta-item">
+          <button class="meta-item meta-button account-button" type="button" aria-haspopup="dialog" aria-controls="account-dialog">
             <span class="meta-label">Account</span>
             <strong>Personal</strong>
-          </div>
-          <button class="meta-item meta-button" type="button">
+          </button>
+          <button class="meta-item meta-button settings-button" type="button">
             <span class="meta-label">Settings</span>
             <strong>System</strong>
           </button>
@@ -318,6 +318,28 @@
           <label class="dialog-field">Theme<select id="settings-theme-select"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
           <label class="source-option"><input id="reduced-motion-setting" type="checkbox" /> <span><strong>Reduce motion</strong><small>Prefer shorter interface transitions</small></span></label>
           <div class="dialog-actions"><button class="text-button" value="cancel">Cancel</button><button class="primary-button settings-save-button" value="default">Save settings</button></div>
+        </form>
+      </dialog>
+
+      <dialog class="app-dialog" id="account-dialog" aria-labelledby="account-dialog-title">
+        <form method="dialog" class="dialog-card account-form">
+          <div class="dialog-header">
+            <div>
+              <p class="eyebrow">Cloud sync</p>
+              <h2 id="account-dialog-title">Account</h2>
+            </div>
+            <button class="icon-button" value="cancel" aria-label="Close account dialog">✕</button>
+          </div>
+          <div id="account-status" class="account-status" role="status">Local mode. Cloud sync is optional.</div>
+          <div id="account-signed-out" class="account-fields">
+            <label class="dialog-field">Email<input id="auth-email" type="email" autocomplete="email" required /></label>
+            <label class="dialog-field">Password<input id="auth-password" type="password" autocomplete="current-password" minlength="6" required /></label>
+            <div class="dialog-actions"><button class="text-button auth-sign-in" type="button">Sign in</button><button class="primary-button auth-sign-up" type="button">Create account</button></div>
+          </div>
+          <div id="account-signed-in" class="account-fields" hidden>
+            <p>Signed in as <strong id="account-email"></strong></p>
+            <div class="dialog-actions"><button class="primary-button auth-sign-out" type="button">Sign out</button></div>
+          </div>
         </form>
       </dialog>
     </div>

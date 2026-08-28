@@ -5,6 +5,7 @@ import { createAppRuntime } from './ui-state.js';
 import { AudioPlayer } from './player.js';
 import { LocalSourceManager } from './local-sources.js';
 import { ServerLibraryManager } from './server-library.js';
+import { firebaseSync } from './firebase-sync.js';
 
 const appState = {
   ready: false,
@@ -188,6 +189,19 @@ const showUnavailableNotice = (message) => {
   notice.classList.add('is-visible');
   window.clearTimeout(notice.dismissTimer);
   notice.dismissTimer = window.setTimeout(() => notice.classList.remove('is-visible'), 3200);
+};
+
+const renderAccountState = (state) => {
+  const status = document.getElementById('account-status');
+  const signedOut = document.getElementById('account-signed-out');
+  const signedIn = document.getElementById('account-signed-in');
+  const email = document.getElementById('account-email');
+  const accountLabel = document.querySelector('.account-button strong');
+  if (status) status.textContent = state.user ? `Signed in as ${state.user.email}` : state.status === 'unavailable' ? 'Firebase unavailable. Local mode remains active.' : 'Local mode. Cloud sync is optional.';
+  if (signedOut) signedOut.hidden = Boolean(state.user);
+  if (signedIn) signedIn.hidden = !state.user;
+  if (email) email.textContent = state.user?.email || '';
+  if (accountLabel) accountLabel.textContent = state.user?.email || 'Local mode';
 };
 
 const formatTime = (seconds) => {
@@ -435,7 +449,7 @@ const initApp = async () => {
   const sourceDialog = document.getElementById('source-dialog');
   const settingsDialog = document.getElementById('settings-dialog');
   const sourceButton = document.querySelector('.source-button');
-  const settingsButton = document.querySelector('.meta-button:not(.source-button)');
+  const settingsButton = document.querySelector('.settings-button');
   const sourceSaveButton = document.querySelector('.source-save-button');
   const settingsSaveButton = document.querySelector('.settings-save-button');
   const scanFilesButton = document.querySelector('.scan-files-button');
@@ -446,6 +460,13 @@ const initApp = async () => {
   const libraryResults = document.getElementById('library-results');
   const connectedSources = document.getElementById('connected-sources');
   const addFolderButton = document.querySelector('.add-folder-button');
+  const accountDialog = document.getElementById('account-dialog');
+  const accountButton = document.querySelector('.account-button');
+  const signInButton = document.querySelector('.auth-sign-in');
+  const signUpButton = document.querySelector('.auth-sign-up');
+  const signOutButton = document.querySelector('.auth-sign-out');
+  const authEmail = document.getElementById('auth-email');
+  const authPassword = document.getElementById('auth-password');
   const serverEnabled = document.getElementById('server-enabled');
   const serverUrl = document.getElementById('server-url');
   const refreshServerButton = document.querySelector('.refresh-server-button');
@@ -459,12 +480,21 @@ const initApp = async () => {
   renderServerStatus(serverLibrary.getState());
   renderConnectedSources(localSources.sources, connectedSources);
   updatePlayerUi(audioPlayer.getState());
+  renderAccountState(firebaseSync.getState());
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {
       // Ignore registration errors during the project foundation phase.
     });
   }
+
+  firebaseSync.initialize(async (state) => {
+    renderAccountState(state);
+    if (state.user) {
+      const synced = await firebaseSync.syncLocalState(storage);
+      if (!synced.synced && synced.error) showUnavailableNotice(synced.error);
+    }
+  }).then(renderAccountState);
 
   try {
     const library = new LibraryEngine(storage);
@@ -645,6 +675,25 @@ const initApp = async () => {
       }
     });
   }
+
+  accountButton?.addEventListener('click', () => accountDialog?.showModal());
+  signInButton?.addEventListener('click', async () => {
+    try {
+      await firebaseSync.signIn(authEmail.value, authPassword.value);
+    } catch (error) {
+      renderAccountState({ ...firebaseSync.getState(), error: error.message, status: 'error' });
+      showUnavailableNotice(error.message);
+    }
+  });
+  signUpButton?.addEventListener('click', async () => {
+    try {
+      await firebaseSync.signUp(authEmail.value, authPassword.value);
+    } catch (error) {
+      renderAccountState({ ...firebaseSync.getState(), error: error.message, status: 'error' });
+      showUnavailableNotice(error.message);
+    }
+  });
+  signOutButton?.addEventListener('click', () => firebaseSync.signOut().catch((error) => showUnavailableNotice(error.message)));
   const initialServerState = serverLibrary.getState();
   if (initialServerState.source.enabled) {
     serverLibrary.refresh().then((state) => {

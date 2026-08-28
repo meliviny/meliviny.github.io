@@ -238,22 +238,31 @@
         </div>
 
         <div class="player-controls" aria-label="Player controls">
-          <button class="player-control" type="button" aria-label="Shuffle" disabled>⇄</button>
-          <button class="player-control" type="button" aria-label="Previous" disabled>⏮</button>
+          <button class="player-control shuffle-toggle" type="button" aria-label="Shuffle" disabled>⇄</button>
+          <button class="player-control previous-toggle" type="button" aria-label="Previous" disabled>⏮</button>
           <button class="player-control primary playback-toggle" type="button" aria-label="Play" disabled>▶</button>
-          <button class="player-control" type="button" aria-label="Next" disabled>⏭</button>
-          <button class="player-control" type="button" aria-label="Repeat" disabled>↻</button>
+          <button class="player-control next-toggle" type="button" aria-label="Next" disabled>⏭</button>
+          <button class="player-control repeat-toggle" type="button" aria-label="Repeat mode" disabled>↻</button>
+        </div>
+
+        <div class="player-options">
+          <label class="volume-control" for="volume-range">Volume<input id="volume-range" type="range" min="0" max="1" step="0.01" value="0.8" /></label>
+          <button class="text-button mute-toggle" type="button" disabled>Mute</button>
+          <label class="compact-select">Repeat<select id="repeat-select"><option value="off">Off</option><option value="repeat-all">All</option><option value="repeat-one">One</option></select></label>
+          <label class="compact-check"><input id="mono-toggle" type="checkbox" /> Mono</label>
+          <label class="compact-select">EQ<select id="eq-select"><option value="flat">Flat</option><option value="bass-boost">Bass Boost</option><option value="vocal">Vocal</option><option value="treble">Treble</option><option value="classical">Classical</option></select></label>
         </div>
 
         <div class="player-actions">
           <button type="button">Download</button>
-          <button type="button">Share</button>
-          <button type="button">File info</button>
+          <button id="share-button" type="button">Share</button>
+          <button id="file-info-button" type="button">File info</button>
         </div>
 
         <div class="queue-panel">
           <h4>Queue</h4>
           <p class="queue-empty">Queue is empty until a track is selected.</p>
+          <ul id="queue-list" hidden></ul>
         </div>
       </aside>
 
@@ -272,9 +281,9 @@
         </div>
 
         <div class="mini-controls" aria-label="Mini player controls">
-          <button class="mini-button" type="button" aria-label="Previous track" disabled>⏮</button>
+          <button class="mini-button previous-toggle" type="button" aria-label="Previous track" disabled>⏮</button>
           <button class="mini-button primary playback-toggle" type="button" aria-label="Play or pause" disabled>▶</button>
-          <button class="mini-button" type="button" aria-label="Next track" disabled>⏭</button>
+          <button class="mini-button next-toggle" type="button" aria-label="Next track" disabled>⏭</button>
           <button class="mini-button queue-button" type="button" aria-label="Queue">☰</button>
         </div>
       </footer>

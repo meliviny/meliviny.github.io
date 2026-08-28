@@ -260,7 +260,8 @@ const scanAudioFiles = async (files, library, resultsElement, emptyState) => {
     row.className = 'library-track-row';
     row.innerHTML = `<span>${track.title}</span><small>${track.format.toUpperCase()} · ${formatTime(track.duration / 1000)}</small>`;
     row.addEventListener('click', () => {
-      audioPlayer.loadTrack(track, track.sources[0]);
+      audioPlayer.setQueue(tracks.map((queueTrack) => ({ track: queueTrack, source: queueTrack.sources[0] })), tracks.indexOf(track));
+      audioPlayer.loadTrack(track, track.sources[0], { restorePosition: true });
       document.querySelector('.player-drawer')?.classList.add('is-open');
     });
     resultsElement.append(row);
@@ -276,20 +277,55 @@ const updatePlayerUi = (state) => {
   const playButtons = document.querySelectorAll('.playback-toggle');
   const progressFills = document.querySelectorAll('.progress-fill, .mini-progress-fill');
   const timeTargets = document.querySelectorAll('.time-row span');
+  const statusTarget = document.querySelector('.player-kicker');
+  const queueList = document.getElementById('queue-list');
+  const queueEmpty = document.querySelector('.queue-empty');
+  const navigationButtons = document.querySelectorAll('.previous-toggle, .next-toggle, .shuffle-toggle, .repeat-toggle, .mute-toggle');
+  const volumeRange = document.getElementById('volume-range');
+  const muteToggle = document.querySelector('.mute-toggle');
+  const repeatSelect = document.getElementById('repeat-select');
+  const shuffleToggle = document.querySelector('.shuffle-toggle');
+  const monoToggle = document.getElementById('mono-toggle');
 
   titleTargets.forEach((element) => { element.textContent = title; });
   artistTargets.forEach((element) => { element.textContent = artist; });
+  if (statusTarget) statusTarget.textContent = state.status === 'idle' ? 'Player ready' : state.status;
   playButtons.forEach((button) => {
     button.disabled = !track || !state.source;
     button.textContent = state.isPlaying ? '❚❚' : '▶';
     button.setAttribute('aria-label', state.isPlaying ? 'Pause' : 'Play');
   });
+  navigationButtons.forEach((button) => { button.disabled = !track; });
+  if (volumeRange) volumeRange.value = String(state.volume);
+  if (muteToggle) {
+    muteToggle.disabled = !track;
+    muteToggle.textContent = state.muted ? 'Unmute' : 'Mute';
+  }
+  if (repeatSelect) repeatSelect.value = state.repeatMode;
+  if (shuffleToggle) {
+    shuffleToggle.classList.toggle('is-active', state.shuffle);
+    shuffleToggle.setAttribute('aria-pressed', String(state.shuffle));
+  }
+  if (monoToggle) monoToggle.checked = state.mono;
 
   const ratio = state.durationSeconds ? (state.positionSeconds / state.durationSeconds) * 100 : 0;
   progressFills.forEach((element) => { element.style.width = `${Math.min(Math.max(ratio, 0), 100)}%`; });
   if (timeTargets.length >= 2) {
     timeTargets[0].textContent = formatTime(state.positionSeconds);
     timeTargets[1].textContent = formatTime(state.durationSeconds);
+  }
+
+  if (queueList && queueEmpty) {
+    queueList.innerHTML = '';
+    queueEmpty.hidden = state.queue.length > 0;
+    queueList.hidden = state.queue.length === 0;
+    state.queue.forEach((item, index) => {
+      const entry = document.createElement('li');
+      entry.className = `queue-item${index === state.currentIndex ? ' active' : ''}`;
+      entry.innerHTML = `<span>${item.track.title}</span><button type="button" class="queue-remove" aria-label="Remove ${item.track.title}">×</button>`;
+      entry.querySelector('.queue-remove').addEventListener('click', () => audioPlayer.removeFromQueue(index));
+      queueList.append(entry);
+    });
   }
 
   if (state.error) {
@@ -387,6 +423,16 @@ const initApp = async () => {
   const audioElement = document.getElementById('audio-engine');
   const playbackToggles = document.querySelectorAll('.playback-toggle');
   const progressBars = document.querySelectorAll('.progress-bar, .mini-progress');
+  const volumeRange = document.getElementById('volume-range');
+  const muteToggle = document.querySelector('.mute-toggle');
+  const repeatSelect = document.getElementById('repeat-select');
+  const shuffleToggle = document.querySelector('.shuffle-toggle');
+  const monoToggle = document.getElementById('mono-toggle');
+  const eqSelect = document.getElementById('eq-select');
+  const previousToggles = document.querySelectorAll('.previous-toggle');
+  const nextToggles = document.querySelectorAll('.next-toggle');
+  const shareButton = document.getElementById('share-button');
+  const fileInfoButton = document.getElementById('file-info-button');
   const sourceDialog = document.getElementById('source-dialog');
   const settingsDialog = document.getElementById('settings-dialog');
   const sourceButton = document.querySelector('.source-button');
@@ -423,6 +469,13 @@ const initApp = async () => {
     } else {
       applyThemePreference(appState.theme);
       applyAccentStyle(appState.accent);
+    }
+
+    const savedPlayback = await library.getPlaybackState();
+    const savedTrack = savedPlayback?.currentTrackId ? await library.getTrack(savedPlayback.currentTrackId) : null;
+    const savedSource = savedTrack?.sources?.find((source) => source.id === savedPlayback.sourceId) || savedTrack?.sources?.[0];
+    if (savedTrack && savedSource?.url && !savedSource.url.startsWith('blob:')) {
+      await audioPlayer.loadTrack(savedTrack, savedSource, { restorePosition: true });
     }
   } catch (error) {
     console.warn('Meliviny could not load saved settings.', error);
@@ -494,6 +547,14 @@ const initApp = async () => {
   }));
   queueButton?.addEventListener('click', openPlayer);
   playbackToggles.forEach((button) => button.addEventListener('click', () => audioPlayer.togglePlayback()));
+  previousToggles.forEach((button) => button.addEventListener('click', () => audioPlayer.previous()));
+  nextToggles.forEach((button) => button.addEventListener('click', () => audioPlayer.next()));
+  shuffleToggle?.addEventListener('click', () => audioPlayer.setShuffle(!audioPlayer.getState().shuffle));
+  muteToggle?.addEventListener('click', () => audioPlayer.toggleMute());
+  volumeRange?.addEventListener('input', () => audioPlayer.setVolume(volumeRange.value));
+  repeatSelect?.addEventListener('change', () => audioPlayer.setRepeatMode(repeatSelect.value));
+  monoToggle?.addEventListener('change', () => audioPlayer.setMono(monoToggle.checked));
+  eqSelect?.addEventListener('change', () => audioPlayer.setEqPreset(eqSelect.value));
   progressBars.forEach((bar) => bar.addEventListener('click', (event) => {
     if (!audioPlayer?.getState().durationSeconds) {
       return;
@@ -530,6 +591,35 @@ const initApp = async () => {
   scanFolderButton?.addEventListener('click', () => folderInput?.click());
   filesInput?.addEventListener('change', () => scanAudioFiles(filesInput.files, new LibraryEngine(storage), libraryResults, libraryEmptyState));
   folderInput?.addEventListener('change', () => scanAudioFiles(folderInput.files, new LibraryEngine(storage), libraryResults, libraryEmptyState));
+  shareButton?.addEventListener('click', async () => {
+    const state = audioPlayer.getState();
+    if (!state.track) { showUnavailableNotice('Select a track before sharing.'); return; }
+    const text = `${state.track.title} - ${state.track.artists?.join(', ') || 'Unknown artist'} (${state.track.album || 'Unknown album'})`;
+    try {
+      if (navigator.share) await navigator.share({ title: state.track.title, text });
+      else await navigator.clipboard.writeText(text);
+      showUnavailableNotice(navigator.share ? 'Share sheet opened.' : 'Track details copied to clipboard.');
+    } catch { showUnavailableNotice('Sharing was cancelled or unavailable.'); }
+  });
+  fileInfoButton?.addEventListener('click', () => {
+    const state = audioPlayer.getState();
+    if (!state.track) { showUnavailableNotice('Select a track to view file information.'); return; }
+    const source = state.source;
+    showUnavailableNotice(`${state.track.filename || 'Unknown file'} · ${state.track.format || 'Unknown format'} · ${formatTime(state.durationSeconds)} · ${source?.type || 'Unknown source'}`);
+  });
+  window.addEventListener('keydown', (event) => {
+    const target = event.target;
+    if (target.matches('input, textarea, select, [contenteditable="true"]')) return;
+    if (event.code === 'Space') { event.preventDefault(); audioPlayer.togglePlayback(); }
+    if (event.key === 'ArrowRight') audioPlayer.seekTo(audioPlayer.getState().positionSeconds + 5);
+    if (event.key === 'ArrowLeft') audioPlayer.seekTo(audioPlayer.getState().positionSeconds - 5);
+    if (event.key === 'ArrowUp') audioPlayer.setVolume(audioPlayer.getState().volume + 0.05);
+    if (event.key === 'ArrowDown') audioPlayer.setVolume(audioPlayer.getState().volume - 0.05);
+    if (event.key.toLowerCase() === 'm') audioPlayer.toggleMute();
+    if (event.key.toLowerCase() === 'n') audioPlayer.next();
+    if (event.key.toLowerCase() === 'p') audioPlayer.previous();
+    if (event.key.toLowerCase() === 'q') openPlayer();
+  });
 
   if (mobileMenuToggle) {
     mobileMenuToggle.addEventListener('click', () => {

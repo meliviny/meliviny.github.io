@@ -963,7 +963,7 @@ button:disabled {
 
 @media (max-width: 1100px) {
   .app-shell {
-    grid-template-columns: minmax(0, 1fr) var(--player-drawer-width);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .sidebar {
@@ -990,14 +990,48 @@ button:disabled {
   }
 
   .player-drawer {
-    min-height: auto;
+    position: fixed;
+    z-index: 22;
+    top: 1rem;
+    right: 1rem;
+    bottom: 1rem;
+    width: min(var(--player-drawer-width), calc(100vw - 2rem));
+    min-height: 0;
+    overflow-y: auto;
+    transform: translateX(calc(100% + 2rem));
+    transition: transform var(--transition-slow);
   }
+
+  .player-drawer.is-open { transform: translateX(0); }
 
   .mini-player {
-    right: calc(var(--player-drawer-width) + 2.5rem);
+    right: 1.25rem;
     left: 1.25rem;
   }
+}
 
+@media (min-width: 1101px) {
+  .app-shell[data-sidebar-collapsed='true'] {
+    grid-template-columns: var(--sidebar-collapsed) minmax(0, 1fr) var(--player-drawer-width);
+  }
+}
+
+@media (min-width: 761px) and (max-width: 980px) {
+  .topbar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .card-row,
+  .artist-grid,
+  .playlist-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
@@ -1018,9 +1052,18 @@ button:disabled {
     z-index: 30;
   }
 
+  .sidebar.is-open[data-collapsed='true'] {
+    width: min(18rem, 78vw);
+    padding: 1rem;
+    border: 1px solid var(--border);
+    opacity: 1;
+    pointer-events: auto;
+  }
+
   .topbar {
     border-radius: 1.1rem;
     padding: 0.75rem 0.9rem;
+    flex-wrap: wrap;
   }
 
   .mobile-menu-toggle {
@@ -1034,14 +1077,30 @@ button:disabled {
   }
 
   .topbar-title {
-    flex: 1;
+    flex: 1 1 auto;
     text-align: center;
   }
 
   .topbar-actions {
-    width: auto;
+    width: 100%;
+    min-width: 0;
     gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
+
+  .source-quick-control,
+  .theme-switch {
+    flex: 1 1 8rem;
+    max-width: 100%;
+  }
+
+  .accent-picker {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .accent-picker { flex-wrap: wrap; }
 
   .theme-switch span {
     display: none;
@@ -1060,7 +1119,6 @@ button:disabled {
   }
 
   .player-drawer {
-    margin-top: 1rem;
     display: none;
   }
 
@@ -1105,7 +1163,7 @@ button:disabled {
     bottom: max(0.85rem, env(safe-area-inset-bottom));
     left: 0.85rem;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.35rem;
     padding: 0.45rem;
     border: 1px solid var(--border);

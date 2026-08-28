@@ -187,6 +187,7 @@ const handleSidebarToggle = () => {
   const isCollapsed = sidebar.dataset.collapsed === 'true';
   sidebar.dataset.collapsed = String(!isCollapsed);
   runtime.ui.sidebarCollapsed = !isCollapsed;
+  document.querySelector('.app-shell')?.setAttribute('data-sidebar-collapsed', String(!isCollapsed));
 
   const toggleButton = document.querySelector('.sidebar-toggle');
   if (toggleButton) {
@@ -205,12 +206,12 @@ const handleMobileSidebar = () => {
   if (!isMobile) {
     sidebar.style.display = '';
     sidebar.classList.remove('is-open');
+    sidebar.dataset.collapsed = String(runtime.ui.sidebarCollapsed);
     return;
   }
 
-  const shouldOpen = sidebar.classList.contains('is-open');
-  sidebar.classList.toggle('is-open', shouldOpen);
-  sidebar.style.display = shouldOpen ? 'flex' : 'none';
+  sidebar.dataset.collapsed = 'false';
+  sidebar.style.display = '';
 };
 
 const showUnavailableNotice = (message) => {
@@ -1197,7 +1198,7 @@ const initApp = async () => {
       }
 
       const isOpen = sidebar.classList.toggle('is-open');
-      sidebar.style.display = isOpen ? 'flex' : 'none';
+      sidebar.setAttribute('aria-hidden', String(!isOpen));
     });
   }
 
